@@ -73,12 +73,9 @@ class ActionEvaluator(EvaluatorBase):
                 if gold_action.compare_with_tool_call(pred_tool_call):
                     found = True
                     break
-            if not found:
-                gold_action_reward = 0.0
-                gold_action_match = False
-            else:
-                gold_action_reward = 1.0
-                gold_action_match = True
+            # For forbidden actions the check passes when the action was NOT performed
+            gold_action_match = (not found) if gold_action.forbid else found
+            gold_action_reward = 1.0 if gold_action_match else 0.0
             action_checks.append(
                 ActionCheck(
                     action=gold_action,

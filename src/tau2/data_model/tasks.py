@@ -144,6 +144,10 @@ class Action(BaseModel):
         description="The arguments to check in tool call. If None, will check all the arguments.",
         default=None,
     )
+    forbid: bool = Field(
+        description="If True, the check passes when the action was NOT performed (negative check).",
+        default=False,
+    )
 
     def __str__(self) -> str:
         lines = []
@@ -153,6 +157,8 @@ class Action(BaseModel):
         lines.append(f"Arguments:\n{json.dumps(self.arguments, indent=2)}")
         if self.info is not None:
             lines.append(f"Info:\n{textwrap.indent(self.info, '    ')}")
+        if self.forbid:
+            lines.append("Forbid: True (check passes when action is NOT performed)")
         return "\n".join(lines)
 
     def get_func_format(self) -> str:
