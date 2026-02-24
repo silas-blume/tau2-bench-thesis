@@ -13,6 +13,7 @@ from tau2.domains.telecom.utils import (
     TELECOM_MAIN_POLICY_PATH,
     TELECOM_MAIN_POLICY_SOLO_PATH,
     TELECOM_TASK_SET_PATH,
+    TELECOM_ADV_TASK_SET_PATH,
     TELECOM_TECH_SUPPORT_POLICY_MANUAL_PATH,
     TELECOM_TECH_SUPPORT_POLICY_MANUAL_SOLO_PATH,
     TELECOM_TECH_SUPPORT_POLICY_WORKFLOW_PATH,
@@ -178,6 +179,12 @@ def get_tasks(task_split_name: Optional[str] = "base") -> list[Task]:
             f"Invalid task split name: {task_split_name}. Valid splits are: {task_splits.keys()}"
         )
     return [task for task in tasks if task.id in task_splits[task_split_name]]
+
+
+def get_adv_tasks(task_split_name: Optional[str] = None) -> list[Task]:
+    tasks = load_tasks(TELECOM_ADV_TASK_SET_PATH)
+    tasks = [Task.model_validate(task) for task in tasks]
+    return tasks
 
 
 def get_tasks_split() -> dict[str, list[str]]:

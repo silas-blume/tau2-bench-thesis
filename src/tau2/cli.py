@@ -94,6 +94,11 @@ def add_run_args(parser):
         help="(Optional) run only the tasks with the given IDs. If not provided, will run all tasks.",
     )
     parser.add_argument(
+        "--adv-tasks",
+        action="store_true",
+        help="Run adversarial tasks instead of standard tasks (defaults to False).",
+    )
+    parser.add_argument(
         "--num-tasks",
         type=int,
         default=None,
@@ -157,6 +162,7 @@ def main():
                 task_set_name=args.task_set_name,
                 task_split_name=args.task_split_name,
                 task_ids=args.task_ids,
+                adv_tasks=args.adv_tasks,
                 num_tasks=args.num_tasks,
                 agent=args.agent,
                 llm_agent=args.agent_llm,

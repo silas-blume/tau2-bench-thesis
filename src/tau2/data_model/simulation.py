@@ -55,6 +55,13 @@ class RunConfig(BaseModel):
             default=None,
         ),
     ]
+    adv_tasks: Annotated[
+        bool,
+        Field(
+            description="Whether to run adversarial tasks",
+            default=False,
+        ),
+    ]
     num_tasks: Annotated[
         Optional[int],
         Field(
