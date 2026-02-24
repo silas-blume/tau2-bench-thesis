@@ -193,12 +193,18 @@ class ConsoleDisplay:
         sim_info.append(f"{simulation.duration:.2f}s\n")
         sim_info.append("Termination Reason: ", style="bold cyan")
         sim_info.append(f"{simulation.termination_reason}\n")
+        
+        sim_info.append("Agent Cost: ", style="bold cyan")
         if simulation.agent_cost is not None:
-            sim_info.append("Agent Cost: ", style="bold cyan")
             sim_info.append(f"${simulation.agent_cost:.4f}\n")
+        else:
+            sim_info.append("no info\n")
+
+        sim_info.append("User Cost: ", style="bold cyan")
         if simulation.user_cost is not None:
-            sim_info.append("User Cost: ", style="bold cyan")
             sim_info.append(f"${simulation.user_cost:.4f}\n")
+        else:
+            sim_info.append("no info\n")
         if simulation.reward_info:
             marker = "✅" if is_successful(simulation.reward_info.reward) else "❌"
             sim_info.append("Reward: ", style="bold cyan")

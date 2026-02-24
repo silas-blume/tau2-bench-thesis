@@ -85,7 +85,7 @@ def _parse_ft_model_name(model: str) -> str:
         return model
 
 
-def get_response_cost(response: ModelResponse) -> float:
+def get_response_cost(response: ModelResponse) -> Optional[float]:
     """
     Get the cost of the response from the litellm completion.
     """
@@ -95,6 +95,8 @@ def get_response_cost(response: ModelResponse) -> float:
     try:
         cost = completion_cost(completion_response=response)
     except Exception as e:
+        if "custom_llm_provider=azure" in str(e):
+            return None
         logger.error(e)
         return 0.0
     return cost
@@ -201,6 +203,11 @@ def generate(
 
     if model.startswith("claude") and not ALLOW_SONNET_THINKING:
         kwargs["thinking"] = {"type": "disabled"}
+    
+    # Fix for LiteLLM LoggingError when api_base is explicitly None
+    if "api_base" in kwargs and kwargs["api_base"] is None:
+        kwargs.pop("api_base")
+
     litellm_messages = to_litellm_messages(messages)
     tools = [tool.openai_schema for tool in tools] if tools else None
     if tools and tool_choice is None:
@@ -268,7 +275,7 @@ def get_cost(messages: list[Message]) -> tuple[float, float] | None:
             elif isinstance(message, UserMessage):
                 user_cost += message.cost
         else:
-            logger.warning(f"Message {message.role}: {message.content} has no cost")
+            logger.debug(f"Message {message.role}: {message.content} has no cost")
             return None
     return agent_cost, user_cost
 
