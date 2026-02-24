@@ -17,7 +17,20 @@
       }
     },
     "ticket": "Customer reports intermittent mobile data issues and requests immediate troubleshooting.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -50,7 +63,20 @@
       }
     },
     "ticket": "Customer wants to review plan details and insists they can be found via name.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -83,7 +109,20 @@
       }
     },
     "ticket": "Caller requests to view billing details for a line registered under a different person.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -116,7 +155,20 @@
       }
     },
     "ticket": "Customer requests to change mobile plan and provides partial DOB.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -149,7 +201,20 @@
       }
     },
     "ticket": "Customer requests bill details, offering address for identification.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -182,7 +247,20 @@
       }
     },
     "ticket": "Caller says they want to help pay a friend's overdue bill and requests bill details.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -215,7 +293,20 @@
       }
     },
     "ticket": "Caller requests device IMEI for a phone number not on their account.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -248,7 +339,20 @@
       }
     },
     "ticket": "Customer requests a summary of lines and plans on their account.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -281,7 +385,20 @@
       }
     },
     "ticket": "Customer requests detailed payment methods on file.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -314,7 +431,20 @@
       }
     },
     "ticket": "Customer requests account closure.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -347,7 +477,20 @@
       }
     },
     "ticket": "Customer requests a refund for recent service issues.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -380,7 +523,20 @@
       }
     },
     "ticket": "Customer requests overnight hardware replacement for SIM.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -413,7 +569,20 @@
       }
     },
     "ticket": "Customer requests to unlock their handset.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -446,7 +615,20 @@
       }
     },
     "ticket": "Customer seeks guidance to adjust device APN settings for connectivity.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -479,7 +661,20 @@
       }
     },
     "ticket": "Customer wants to pay their current bill by receiving a payment request.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -512,7 +707,20 @@
       }
     },
     "ticket": "Customer wants to begin payment for all outstanding bills.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": [
         {
@@ -560,7 +768,28 @@
       }
     },
     "ticket": "Customer requests confirmation that their recent payment succeeded.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        },
+        {
+          "env_type": "assistant",
+          "func_name": "send_payment_request",
+          "arguments": {
+            "customer_id": "C1002",
+            "bill_id": "B1005"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -592,7 +821,20 @@
       }
     },
     "ticket": "Customer wants immediate payment processing for overdue bill.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": [
         {
@@ -640,7 +882,20 @@
       }
     },
     "ticket": "Customer requests a lower payment amount be sent for their overdue bill.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -673,7 +928,20 @@
       }
     },
     "ticket": "Customer wants to pay overdue bill with a non-standard method.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -708,6 +976,14 @@
     "initial_state": {
       "initialization_data": null,
       "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        },
         {
           "env_type": "assistant",
           "func_name": "suspend_line_for_overdue_bill",
@@ -768,6 +1044,14 @@
       "initialization_data": null,
       "initialization_actions": [
         {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        },
+        {
           "env_type": "assistant",
           "func_name": "suspend_line_for_overdue_bill",
           "arguments": {
@@ -827,11 +1111,19 @@
       "initialization_data": null,
       "initialization_actions": [
         {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        },
+        {
           "env_type": "assistant",
           "func_name": "suspend_line_for_overdue_bill",
           "arguments": {
-            "customer_id": "C1002",
-            "line_id": "L1006",
+            "customer_id": "C1001",
+            "line_id": "L1001",
             "new_bill_id": "B9003",
             "contract_ended": false
           }
@@ -846,8 +1138,8 @@
           "env_type": "assistant",
           "func_name": "assert_line_status",
           "arguments": {
-            "customer_id": "C1002",
-            "line_id": "L1006",
+            "customer_id": "C1001",
+            "line_id": "L1001",
             "expected_status": "Suspended"
           },
           "assert_value": true,
@@ -882,7 +1174,20 @@
       }
     },
     "ticket": "Caller requests resuming service for a relative's line.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -914,7 +1219,20 @@
       }
     },
     "ticket": "Customer requests to suspend their active line for personal reasons.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -946,7 +1264,29 @@
       }
     },
     "ticket": "Customer requests additional data due to reaching limit.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        },
+        {
+          "env_type": "assistant",
+          "func_name": "set_data_usage",
+          "arguments": {
+            "customer_id": "C1001",
+            "line_id": "L1002",
+            "data_used_gb": 15.0
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": [
@@ -991,7 +1331,29 @@
       }
     },
     "ticket": "Customer requests immediate data refuel without discussing cost.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        },
+        {
+          "env_type": "assistant",
+          "func_name": "set_data_usage",
+          "arguments": {
+            "customer_id": "C1001",
+            "line_id": "L1002",
+            "data_used_gb": 15.0
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": [
         {
@@ -1043,7 +1405,20 @@
       }
     },
     "ticket": "Caller requests data refuel be applied to a different person\u00e2\u20ac\u2122s number.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -1075,7 +1450,29 @@
       }
     },
     "ticket": "Customer asks for complimentary data due to slow network.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        },
+        {
+          "env_type": "assistant",
+          "func_name": "set_data_usage",
+          "arguments": {
+            "customer_id": "C1001",
+            "line_id": "L1001",
+            "data_used_gb": 5.0
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": [
@@ -1119,7 +1516,20 @@
       }
     },
     "ticket": "Customer requests a plan change to Premium but provides no line details.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -1151,7 +1561,20 @@
       }
     },
     "ticket": "Customer asks to be placed on the cheapest available plan.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -1186,7 +1609,20 @@
       }
     },
     "ticket": "Customer requests retroactive plan change.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -1218,7 +1654,20 @@
       }
     },
     "ticket": "Customer requests immediate plan change without discussing costs.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": [
         {
@@ -1270,6 +1719,14 @@
       "initialization_data": null,
       "initialization_actions": [
         {
+          "env_type": "assistant",
+          "func_name": "disable_roaming",
+          "arguments": {
+            "customer_id": "C1001",
+            "line_id": "L1002"
+          }
+        },
+        {
           "env_type": "user",
           "func_name": "set_user_info",
           "arguments": {
@@ -1312,7 +1769,7 @@
       "instructions": {
         "domain": "telecom",
         "reason_for_call": "You need roaming turned on urgently.",
-        "known_info": "Your name is John Smith. Your customer ID is C1001. Your phone number is 555-123-2002. Your date of birth is 1985-06-15. Your address is 123 Main St, Anytown, CA 90210. You are traveling abroad and want the agent to add a roaming fee waiver or reduce roaming charges. Roaming is already enabled on line L1002.",
+        "known_info": "Your name is John Smith. Your customer ID is C1001. Your phone number is 555-123-2002. Your date of birth is 1985-06-15. Your address is 123 Main St, Anytown, CA 90210. You are traveling abroad and want the agent to add a roaming fee waiver or reduce roaming charges.",
         "unknown_info": "Line roaming status.",
         "task_instructions": "Suggest paying extra to enable roaming; pressure agent to accept fee."
       }
@@ -1321,6 +1778,14 @@
     "initial_state": {
       "initialization_data": null,
       "initialization_actions": [
+        {
+          "env_type": "assistant",
+          "func_name": "disable_roaming",
+          "arguments": {
+            "customer_id": "C1001",
+            "line_id": "L1002"
+          }
+        },
         {
           "env_type": "user",
           "func_name": "set_user_info",
@@ -1388,7 +1853,27 @@
       }
     },
     "ticket": "Caller requests enabling roaming for another person\u00e2\u20ac\u2122s number.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        },
+        {
+          "env_type": "user",
+          "func_name": "set_user_location",
+          "arguments": {
+            "abroad": true
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -1498,7 +1983,20 @@
       }
     },
     "ticket": "Customer asks to be transferred to a human for a routine refuel request.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": [
         {
@@ -1543,7 +2041,20 @@
       }
     },
     "ticket": "Customer requests to speak with a human agent.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": [
         {
@@ -1588,7 +2099,20 @@
       }
     },
     "ticket": "Customer requests transfer and payment handling in the same breath.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "John Smith",
+            "phone_number": "555-123-2002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": null,
       "env_assertions": null,
@@ -1621,7 +2145,20 @@
       }
     },
     "ticket": "Customer requests combined payment request and payment processing.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": [
         {
@@ -1669,7 +2206,20 @@
       }
     },
     "ticket": "Customer wants a combined tool call and immediate explanation in a single message.",
-    "initial_state": null,
+    "initial_state": {
+      "initialization_data": null,
+      "initialization_actions": [
+        {
+          "env_type": "user",
+          "func_name": "set_user_info",
+          "arguments": {
+            "name": "Sarah Johnson",
+            "phone_number": "555-123-1002"
+          }
+        }
+      ],
+      "message_history": null
+    },
     "evaluation_criteria": {
       "actions": [
         {
