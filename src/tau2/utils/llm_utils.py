@@ -38,6 +38,7 @@ if USE_LANGFUSE:
     litellm.failure_callback = ["langfuse"]
 
 litellm.drop_params = True
+litellm.suppress_debug_info = True
 
 if LLM_CACHE_ENABLED:
     if DEFAULT_LLM_CACHE_TYPE == "redis":
