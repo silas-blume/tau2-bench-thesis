@@ -16,7 +16,7 @@ from tau2.data_model.simulation import (
     SimulationRun,
     UserInfo,
 )
-from tau2.data_model.tasks import Task
+from tau2.data_model.tasks import RewardType, Task
 from tau2.environment.environment import Environment, EnvironmentInfo
 from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
 from tau2.gym.gym_agent import GymAgent
@@ -108,6 +108,24 @@ def make_run_name(config: RunConfig) -> str:
     return f"{get_now()}_{config.domain}_{agent_name}_{user_name}"
 
 
+def _auto_detect_evaluation_type(
+    tasks: list[Task],
+    evaluation_type: EvaluationType = EvaluationType.ALL,
+) -> EvaluationType:
+    """
+    Auto-detect evaluation type: upgrade ALL → ALL_WITH_NL_ASSERTIONS
+    if any task has NL_ASSERTION in its reward_basis.
+    """
+    if evaluation_type == EvaluationType.ALL:
+        if any(
+            task.evaluation_criteria is not None
+            and RewardType.NL_ASSERTION in task.evaluation_criteria.reward_basis
+            for task in tasks
+        ):
+            return EvaluationType.ALL_WITH_NL_ASSERTIONS
+    return evaluation_type
+
+
 def run_domain(config: RunConfig) -> Results:
     """
     Run simulations for a domain
@@ -115,7 +133,12 @@ def run_domain(config: RunConfig) -> Results:
     config.validate()
     ConsoleDisplay.display_run_config(config)
     if config.task_set_name is None:
-        task_set_name = config.domain
+        if not isinstance(config.domain, str):
+            raise ValueError(f"Domain must be a string, got {type(config.domain)}")
+        if config.adv_tasks:
+            task_set_name = f"{config.domain}-adv"
+        else:
+            task_set_name = config.domain
     else:
         task_set_name = config.task_set_name
     tasks = get_tasks(
@@ -148,6 +171,10 @@ def run_domain(config: RunConfig) -> Results:
     if save_to is None:
         save_to = make_run_name(config)
     save_to = DATA_DIR / "simulations" / f"{save_to}.json"
+
+    # Auto-detect: use ALL_WITH_NL_ASSERTIONS if any task has NL_ASSERTION in its reward_basis
+    evaluation_type = _auto_detect_evaluation_type(tasks)
+
     simulation_results = run_tasks(
         domain=config.domain,
         tasks=tasks,
@@ -162,7 +189,7 @@ def run_domain(config: RunConfig) -> Results:
         max_errors=config.max_errors,
         save_to=save_to,
         console_display=True,
-        evaluation_type=EvaluationType.ALL,
+        evaluation_type=evaluation_type,
         max_concurrency=config.max_concurrency,
         seed=config.seed,
         log_level=config.log_level,
@@ -231,6 +258,9 @@ def run_tasks(
         raise ValueError("Max steps must be greater than 0")
     if max_errors <= 0:
         raise ValueError("Max errors must be greater than 0")
+
+    # Auto-detect: upgrade ALL → ALL_WITH_NL_ASSERTIONS if any task uses NL_ASSERTION
+    evaluation_type = _auto_detect_evaluation_type(tasks, evaluation_type)
 
     random.seed(seed)
 
