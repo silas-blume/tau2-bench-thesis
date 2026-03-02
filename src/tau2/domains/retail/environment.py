@@ -7,6 +7,7 @@ from tau2.data_model.tasks import Task
 from tau2.domains.retail.data_model import RetailDB
 from tau2.domains.retail.tools import RetailTools
 from tau2.domains.retail.utils import (
+    RETAIL_ADV_TASK_SET_PATH,
     RETAIL_DB_PATH,
     RETAIL_POLICY_PATH,
     RETAIL_TASK_SET_PATH,
@@ -44,6 +45,12 @@ def get_tasks(task_split_name: Optional[str] = "base") -> list[Task]:
             f"Invalid task split name: {task_split_name}. Valid splits are: {task_splits.keys()}"
         )
     tasks = [task for task in tasks if task.id in task_splits[task_split_name]]
+    return tasks
+
+
+def get_adv_tasks(task_split_name: Optional[str] = None) -> list[Task]:
+    tasks = load_file(RETAIL_ADV_TASK_SET_PATH)
+    tasks = [Task.model_validate(task) for task in tasks]
     return tasks
 
 

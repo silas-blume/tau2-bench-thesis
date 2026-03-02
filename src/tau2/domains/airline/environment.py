@@ -6,6 +6,7 @@ from tau2.data_model.tasks import Task
 from tau2.domains.airline.data_model import FlightDB
 from tau2.domains.airline.tools import AirlineTools
 from tau2.domains.airline.utils import (
+    AIRLINE_ADV_TASK_SET_PATH,
     AIRLINE_DB_PATH,
     AIRLINE_POLICY_PATH,
     AIRLINE_TASK_SET_PATH,
@@ -43,6 +44,12 @@ def get_tasks(task_split_name: Optional[str] = "base") -> list[Task]:
             f"Invalid task split name: {task_split_name}. Valid splits are: {task_splits.keys()}"
         )
     return [task for task in tasks if task.id in task_splits[task_split_name]]
+
+
+def get_adv_tasks(task_split_name: Optional[str] = None) -> list[Task]:
+    tasks = load_file(AIRLINE_ADV_TASK_SET_PATH)
+    tasks = [Task.model_validate(task) for task in tasks]
+    return tasks
 
 
 def get_tasks_split() -> dict[str, list[str]]:

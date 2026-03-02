@@ -10,6 +10,7 @@ from tau2.data_model.tasks import Task
 from tau2.domains.airline.environment import (
     get_environment as airline_domain_get_environment,
 )
+from tau2.domains.airline.environment import get_adv_tasks as airline_domain_get_adv_tasks
 from tau2.domains.airline.environment import get_tasks as airline_domain_get_tasks
 from tau2.domains.airline.environment import (
     get_tasks_split as airline_domain_get_tasks_split,
@@ -19,6 +20,7 @@ from tau2.domains.mock.environment import get_tasks as mock_domain_get_tasks
 from tau2.domains.retail.environment import (
     get_environment as retail_domain_get_environment,
 )
+from tau2.domains.retail.environment import get_adv_tasks as retail_domain_get_adv_tasks
 from tau2.domains.retail.environment import get_tasks as retail_domain_get_tasks
 from tau2.domains.retail.environment import (
     get_tasks_split as retail_domain_get_tasks_split,
@@ -222,6 +224,7 @@ try:
         "airline",
         get_task_splits=airline_domain_get_tasks_split,
     )
+    registry.register_tasks(airline_domain_get_adv_tasks, "airline-adv")
 
     registry.register_domain(retail_domain_get_environment, "retail")
     registry.register_tasks(
@@ -229,6 +232,7 @@ try:
         "retail",
         get_task_splits=retail_domain_get_tasks_split,
     )
+    registry.register_tasks(retail_domain_get_adv_tasks, "retail-adv")
 
     registry.register_domain(telecom_domain_get_environment_manual_policy, "telecom")
     registry.register_domain(
