@@ -4,6 +4,7 @@ from typing import Callable, Dict, Optional, Type
 from loguru import logger
 from pydantic import BaseModel
 
+from tau2.agent.airline_test_agent import AirlineTestAgent
 from tau2.agent.base import BaseAgent
 from tau2.agent.llm_agent import LLMAgent, LLMGTAgent, LLMSoloAgent
 from tau2.data_model.tasks import Task
@@ -214,6 +215,8 @@ try:
     registry.register_agent(LLMAgent, "llm_agent")
     registry.register_agent(LLMGTAgent, "llm_agent_gt")
     registry.register_agent(LLMSoloAgent, "llm_agent_solo")
+    registry.register_agent(AirlineTestAgent, "airline_test_agent")
+
 
     registry.register_domain(mock_domain_get_environment, "mock")
     registry.register_tasks(mock_domain_get_tasks, "mock")
