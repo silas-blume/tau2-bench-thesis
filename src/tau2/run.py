@@ -7,6 +7,7 @@ from typing import Optional
 
 from loguru import logger
 
+from tau2.agent.base import LocalAgent
 from tau2.agent.llm_agent import LLMAgent, LLMGTAgent, LLMSoloAgent
 from tau2.data_model.simulation import (
     AgentInfo,
@@ -511,6 +512,12 @@ def run_task(
         agent = AgentConstructor(
             tools=environment.get_tools(),
             domain_policy=environment.get_policy(),
+        )
+    elif issubclass(AgentConstructor, LocalAgent):
+        agent = AgentConstructor(
+            tools=environment.get_tools(),
+            domain_policy=environment.get_policy(),
+            llm=llm_agent,
         )
     else:
         raise ValueError(
