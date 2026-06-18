@@ -25,6 +25,11 @@ from thesis_dpm_secure_langgraph import (
 )
 
 from tau2.agent.secure_langgraph_adapter import SecureLangGraphAdapter, _DECLINE_PREFIX
+from tau2.agent.secure_airline_agent import (
+    AGENT_INSTRUCTION as SECURE_AGENT_INSTRUCTION,
+    SOFT_AGENT_INSTRUCTION as SECURE_SOFT_AGENT_INSTRUCTION,
+    build_secure_system_prompt,
+)
 from tau2.data_model.message import (
     AssistantMessage,
     ToolCall,
@@ -168,6 +173,28 @@ def test_policy_decl_compiles():
 
 def test_secure_airline_agent_registered():
     assert "secure_airline_agent" in registry.get_agents()
+
+
+def test_build_secure_system_prompt_default_instruction():
+    prompt = build_secure_system_prompt(
+        domain_policy="policy text",
+        soft_agent=False,
+    )
+    assert SECURE_AGENT_INSTRUCTION in prompt
+    assert SECURE_SOFT_AGENT_INSTRUCTION not in prompt
+    assert "<instructions>" in prompt
+    assert "<policy>" in prompt
+
+
+def test_build_secure_system_prompt_soft_instruction():
+    prompt = build_secure_system_prompt(
+        domain_policy="policy text",
+        soft_agent=True,
+    )
+    assert SECURE_SOFT_AGENT_INSTRUCTION in prompt
+    assert SECURE_AGENT_INSTRUCTION not in prompt
+    assert "<instructions>" in prompt
+    assert "<policy>" in prompt
 
 
 def test_allowed_tool_call_produces_validation_event_and_tool_calls():

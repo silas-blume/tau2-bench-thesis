@@ -96,6 +96,25 @@ def get_tasks(
     return tasks
 
 
+def _resolve_domain_policy(domain: str, environment: Environment, soft_agent: bool) -> str:
+    """Resolve the policy text passed to agents.
+
+    In soft-agent mode, prefer domain-info.md if present for the selected domain.
+    Otherwise, fall back to the domain's default policy from the environment.
+    """
+    if not soft_agent:
+        return environment.get_policy()
+
+    domain_info_path = DATA_DIR / "tau2" / "domains" / domain / "domain-info.md"
+    if domain_info_path.exists():
+        return domain_info_path.read_text(encoding="utf-8")
+
+    logger.warning(
+        f"soft_agent=True but {domain_info_path} not found. Falling back to policy.md content."
+    )
+    return environment.get_policy()
+
+
 def make_run_name(config: RunConfig) -> str:
     """
     Make a run name from the run config
@@ -195,6 +214,7 @@ def run_domain(config: RunConfig) -> Results:
         seed=config.seed,
         log_level=config.log_level,
         enforce_communication_protocol=config.enforce_communication_protocol,
+        soft_agent=config.soft_agent,
     )
     metrics = compute_metrics(simulation_results)
     ConsoleDisplay.display_agent_metrics(metrics)
@@ -221,6 +241,7 @@ def run_tasks(
     seed: Optional[int] = 300,
     log_level: Optional[str] = "INFO",
     enforce_communication_protocol: bool = False,
+    soft_agent: bool = False,
 ) -> Results:
     """
     Runs tasks for a given domain.
@@ -243,6 +264,7 @@ def run_tasks(
         seed (int): The seed to use for the simulation.
         log_level (str): The log level to use.
         enforce_communication_protocol (bool): Whether to enforce communication protocol rules.
+        soft_agent (bool): Whether to use soft instruction mode for supported agents.
     Returns:
         The simulation results and the annotations (if llm_review is True).
     """
@@ -399,6 +421,7 @@ def run_tasks(
                 evaluation_type=evaluation_type,
                 seed=seed,
                 enforce_communication_protocol=enforce_communication_protocol,
+                soft_agent=soft_agent,
             )
             simulation.trial = trial
             if console_display:
@@ -446,6 +469,7 @@ def run_task(
     evaluation_type: EvaluationType = EvaluationType.ALL,
     seed: Optional[int] = None,
     enforce_communication_protocol: bool = False,
+    soft_agent: bool = False,
 ) -> SimulationRun:
     """
     Runs tasks for a given domain.
@@ -465,6 +489,7 @@ def run_task(
          evaluation_type (EvaluationType): The type of evaluation to use.
          seed (int): The seed to use for the simulation.
          enforce_communication_protocol (bool): Whether to enforce communication protocol rules.
+         soft_agent (bool): Whether to use soft instruction mode for supported agents.
      Returns:
          The simulation run.
     """
@@ -473,26 +498,41 @@ def run_task(
         raise ValueError("Max steps must be greater than 0")
     if max_errors <= 0:
         raise ValueError("Max errors must be greater than 0")
+    task_begin_time = get_now()
     global registry
     logger.info(
         f"STARTING SIMULATION: Domain: {domain}, Task: {task.id}, Agent: {agent}, User: {user}"
     )
     environment_constructor = registry.get_env_constructor(domain)
     environment = environment_constructor()
+    domain_policy = _resolve_domain_policy(
+        domain=domain,
+        environment=environment,
+        soft_agent=soft_agent,
+    )
     AgentConstructor = registry.get_agent_constructor(agent)
 
     solo_mode = False
-    if issubclass(AgentConstructor, LLMAgent):
+    if agent == "secure_airline_agent":
         agent = AgentConstructor(
             tools=environment.get_tools(),
-            domain_policy=environment.get_policy(),
+            domain_policy=domain_policy,
             llm=llm_agent,
             llm_args=llm_args_agent,
+            soft_agent=soft_agent,
+        )
+    elif issubclass(AgentConstructor, LLMAgent):
+        agent = AgentConstructor(
+            tools=environment.get_tools(),
+            domain_policy=domain_policy,
+            llm=llm_agent,
+            llm_args=llm_args_agent,
+            soft_agent=soft_agent,
         )
     elif issubclass(AgentConstructor, LLMGTAgent):
         agent = AgentConstructor(
             tools=environment.get_tools(),
-            domain_policy=environment.get_policy(),
+            domain_policy=domain_policy,
             llm=llm_agent,
             llm_args=llm_args_agent,
             task=task,
@@ -503,7 +543,7 @@ def run_task(
         user_tools = environment.get_user_tools() if environment.user_tools else []
         agent = AgentConstructor(
             tools=environment.get_tools() + user_tools,
-            domain_policy=environment.get_policy(),
+            domain_policy=domain_policy,
             llm=llm_agent,
             llm_args=llm_args_agent,
             task=task,
@@ -511,12 +551,12 @@ def run_task(
     elif issubclass(AgentConstructor, GymAgent):
         agent = AgentConstructor(
             tools=environment.get_tools(),
-            domain_policy=environment.get_policy(),
+            domain_policy=domain_policy,
         )
     elif issubclass(AgentConstructor, LocalAgent):
         agent = AgentConstructor(
             tools=environment.get_tools(),
-            domain_policy=environment.get_policy(),
+            domain_policy=domain_policy,
             llm=llm_agent,
         )
     else:
@@ -564,6 +604,8 @@ def run_task(
     )
 
     simulation.reward_info = reward_info
+    simulation.task_begin_time = task_begin_time
+    simulation.task_finish_time = get_now()
 
     logger.info(
         f"FINISHED SIMULATION: Domain: {domain}, Task: {task.id}, Agent: {agent.__class__.__name__}, User: {user.__class__.__name__}. Reward: {reward_info.reward}"

@@ -80,6 +80,7 @@ class NLAssertionsEvaluator:
         - The conversation is between an agent and a customer.
         - Your job is to evaluate whether the agent satisfies each of the expected outcomes.
         - Grade each expected outcome individually.
+        - If the agent itself did not satisfy the expected outcome, but was forced into it by the constraint enforcement mechanism, you should still mark the expected outcome as satisfied.
 
         FORMAT
         - Your response should be a JSON object with the following fields:

@@ -189,6 +189,13 @@ class RunConfig(BaseModel):
             default=False,
         ),
     ]
+    soft_agent: Annotated[
+        bool,
+        Field(
+            description="Whether to use soft agent instruction mode",
+            default=False,
+        ),
+    ]
 
     def validate(self) -> None:
         """
@@ -376,6 +383,14 @@ class SimulationRun(BaseModel):
     trial: Optional[int] = Field(description="Trial number", default=None)
     seed: Optional[int] = Field(
         description="Seed used for the simulation.", default=None
+    )
+    task_begin_time: Optional[str] = Field(
+        description="Task execution begin timestamp (captured at run_task entry).",
+        default=None,
+    )
+    task_finish_time: Optional[str] = Field(
+        description="Task execution finish timestamp (captured right before run_task return).",
+        default=None,
     )
     validation_events: list[ValidationEvent] = Field(
         description="Pre-execution validation decisions made by the secure agent (declines only).",

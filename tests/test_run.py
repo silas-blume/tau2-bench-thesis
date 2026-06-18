@@ -29,6 +29,7 @@ def run_config() -> RunConfig:
         domain="mock",
         agent="llm_agent",
         user="user_simulator",
+        soft_agent=False,
         task_ids=["create_task_1"],
         llm_agent="gpt-3.5-turbo",
         llm_args_agent={},
@@ -49,6 +50,7 @@ def run_config_solo() -> RunConfig:
         domain="mock",
         agent="llm_solo_agent",
         user="dummy_user",
+        soft_agent=False,
         task_ids=["create_task_1"],
         llm_agent="gpt-3.5-turbo",
         llm_args_agent={},
@@ -157,6 +159,8 @@ def test_run_task_base(domain_name: str, base_task: Task):
     assert len(simulation.messages) > 0
     assert simulation.start_time is not None
     assert simulation.end_time is not None
+    assert simulation.task_begin_time is not None
+    assert simulation.task_finish_time is not None
     assert simulation.reward_info.reward is not None
 
 

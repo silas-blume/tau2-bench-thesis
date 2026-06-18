@@ -104,17 +104,11 @@ constraints:
   # B. SEQUENCING — Booking flow
   # =========================================================================
 
-  - name: search-direct-before-booking
+  - name: search-direct-before-onestop
     template: Precedence
     first: search_direct_flight(orig, dest, date)
-    second: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
-    description: "Search for available flights before booking."
-
-  - name: search-onestop-before-booking
-    template: Precedence
-    first: search_onestop_flight(orig, dest, date)
-    second: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
-    description: "Search for one-stop options before booking."
+    second: search_onestop_flight(orig, dest, date)
+    description: "Search for direct flights before one-stop options."
 
   # =========================================================================
   # C. SEQUENCING — Compensation flow

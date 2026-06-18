@@ -13,6 +13,7 @@ from tau2.config import (
     DEFAULT_MAX_STEPS,
     DEFAULT_NUM_TRIALS,
     DEFAULT_SEED,
+    DEFAULT_SOFT_AGENT,
     DEFAULT_USER_IMPLEMENTATION,
 )
 from tau2.data_model.simulation import RunConfig
@@ -146,6 +147,12 @@ def add_run_args(parser):
         default=False,
         help="Enforce communication protocol rules (e.g., no mixed messages with text and tool calls). Default is False.",
     )
+    parser.add_argument(
+        "--soft-agent",
+        action="store_true",
+        default=DEFAULT_SOFT_AGENT,
+        help="Use a soft agent instruction that allows policy deviation when requested by the user. Default is False.",
+    )
 
 
 def main():
@@ -164,6 +171,7 @@ def main():
                 task_ids=args.task_ids,
                 adv_tasks=args.adv_tasks,
                 num_tasks=args.num_tasks,
+                is_remote=False,
                 agent=args.agent,
                 llm_agent=args.agent_llm,
                 llm_args_agent=args.agent_llm_args,
@@ -178,6 +186,7 @@ def main():
                 seed=args.seed,
                 log_level=args.log_level,
                 enforce_communication_protocol=args.enforce_communication_protocol,
+                soft_agent=args.soft_agent,
             )
         )
     )

@@ -1,6 +1,11 @@
 import pytest
 
-from tau2.agent.llm_agent import LLMAgent, LLMSoloAgent
+from tau2.agent.llm_agent import (
+    AGENT_INSTRUCTION,
+    SOFT_AGENT_INSTRUCTION,
+    LLMAgent,
+    LLMSoloAgent,
+)
 from tau2.data_model.message import AssistantMessage, UserMessage
 
 
@@ -64,3 +69,28 @@ def test_solo_agent(solo_agent: LLMSoloAgent):
     assert isinstance(agent_msg, AssistantMessage)
     assert agent_state is not None
     assert len(agent_state.messages) == 1
+
+
+def test_llm_agent_default_instruction(get_environment):
+    environment = get_environment()
+    agent = LLMAgent(
+        llm="gpt-4o-mini",
+        tools=environment.get_tools(),
+        domain_policy=environment.get_policy(),
+    )
+    prompt = agent.system_prompt
+    assert AGENT_INSTRUCTION in prompt
+    assert SOFT_AGENT_INSTRUCTION not in prompt
+
+
+def test_llm_agent_soft_instruction(get_environment):
+    environment = get_environment()
+    agent = LLMAgent(
+        llm="gpt-4o-mini",
+        tools=environment.get_tools(),
+        domain_policy=environment.get_policy(),
+        soft_agent=True,
+    )
+    prompt = agent.system_prompt
+    assert SOFT_AGENT_INSTRUCTION in prompt
+    assert AGENT_INSTRUCTION not in prompt

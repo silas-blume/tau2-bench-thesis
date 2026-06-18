@@ -205,3 +205,6 @@ src/experiments/model_training/data/test_full-v1.jsonl
 
 # Logs
 data/tau2/secure_logs
+
+# Artifacts
+artifacts/

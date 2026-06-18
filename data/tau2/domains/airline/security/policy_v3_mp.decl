@@ -48,8 +48,7 @@ Precedence[get_reservation_details, update_reservation_flights] |  |  |
 Precedence[get_reservation_details, update_reservation_baggages] |  |  | 
 Precedence[get_reservation_details, update_reservation_passengers] |  |  | 
 Precedence[get_reservation_details, cancel_reservation] |  |  | 
-Precedence[search_direct_flight, book_reservation] |  |  | 
-Precedence[search_onestop_flight, book_reservation] |  |  | 
+Precedence[search_direct_flight, search_onestop_flight] |  |  | 
 Precedence[get_flight_status, send_certificate] |  |  | 
 Not Response[transfer_to_human_agents, book_reservation] |  |  | 
 Not Response[transfer_to_human_agents, update_reservation_flights] |  |  | 
