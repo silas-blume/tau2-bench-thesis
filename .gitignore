@@ -202,3 +202,6 @@ src/experiments/model_training/data/train_full-v1.jsonl
 src/experiments/model_training/data/test_full-v1.jsonl
 
 *.Identifier
+
+# Logs
+data/tau2/secure_logs

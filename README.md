@@ -123,6 +123,7 @@ To run a test evaluation on only 5 tasks with 1 trial per task, run:
 
 ```bash
 tau2 run --domain airline --agent-llm gpt-4.1 --user-llm gpt-4.1 --num-trials 1 --num-tasks 5
+tau2 run --domain airline --agent secure_airline_agent --agent-llm azure/gpt-5-mini-US --user-llm azure/gpt-5.4-US --num-trials 1 --num-tasks 5 --adv-tasks --save-to test_dir
 ```
 
 Results will be saved in `data/tau2/simulations/`.

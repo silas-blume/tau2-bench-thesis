@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from typing import Any, Optional
 
@@ -39,6 +40,17 @@ if USE_LANGFUSE:
 
 litellm.drop_params = True
 litellm.suppress_debug_info = True
+litellm.turn_off_message_logging = True
+if hasattr(litellm, "set_verbose"):
+    setattr(litellm, "set_verbose", False)
+
+# Keep third-party debug logs out of benchmark output.
+logging.getLogger("litellm").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+logging.getLogger("asyncio").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 
 if LLM_CACHE_ENABLED:
     if DEFAULT_LLM_CACHE_TYPE == "redis":

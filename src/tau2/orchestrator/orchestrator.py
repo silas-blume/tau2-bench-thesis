@@ -16,7 +16,7 @@ from tau2.data_model.message import (
     ToolMessage,
     UserMessage,
 )
-from tau2.data_model.simulation import SimulationRun, TerminationReason
+from tau2.data_model.simulation import SimulationRun, TerminationReason, ValidationEvent
 from tau2.data_model.tasks import EnvFunctionCall, InitializationData, Task
 from tau2.environment.environment import Environment, EnvironmentInfo
 from tau2.user.base import BaseUser, UserError, is_valid_user_history_message
@@ -431,6 +431,13 @@ class Orchestrator:
             agent_cost, user_cost = None, None
         else:
             agent_cost, user_cost = res
+        # Collect validation events (declines) from secure agents
+        validation_events: list[ValidationEvent] = []
+        get_val_events = getattr(self.agent, "get_validation_events", None)
+        if callable(get_val_events):
+            for ev in get_val_events():
+                validation_events.append(ValidationEvent(**ev))
+
         simulation_run = SimulationRun(
             id=str(uuid.uuid4()),
             task_id=self.task.id,
@@ -443,6 +450,7 @@ class Orchestrator:
             agent_cost=agent_cost,
             messages=messages,
             seed=self.seed,
+            validation_events=validation_events,
         )
         return simulation_run
 

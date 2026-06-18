@@ -22,6 +22,21 @@ from tau2.config import (
 )
 from tau2.data_model.message import Message
 from tau2.data_model.tasks import Action, EnvAssertion, RewardType, Task
+
+
+class ValidationEvent(BaseModel):
+    """A single pre-execution validation decision made by the secure agent."""
+
+    tool_name: str = Field(description="Name of the tool that was validated.")
+    tool_call_id: str = Field(description="ID of the tool call.")
+    tool_args: str = Field(description="JSON-serialized tool arguments.")
+    decision: str = Field(description="'allow' or 'decline'.")
+    violations: Optional[str] = Field(
+        description="Violation message when declined.", default=None
+    )
+    timestamp: Optional[str] = Field(
+        description="ISO timestamp of the validation check.", default=None
+    )
 from tau2.environment.environment import EnvironmentInfo
 from tau2.utils.utils import get_now
 
@@ -361,6 +376,10 @@ class SimulationRun(BaseModel):
     trial: Optional[int] = Field(description="Trial number", default=None)
     seed: Optional[int] = Field(
         description="Seed used for the simulation.", default=None
+    )
+    validation_events: list[ValidationEvent] = Field(
+        description="Pre-execution validation decisions made by the secure agent (declines only).",
+        default_factory=list,
     )
 
 

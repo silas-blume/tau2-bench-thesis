@@ -1,0 +1,352 @@
+# Airline Agent Policy — v2 (predicate-heavy)
+# All argument guards delegate to Python predicates; YAML only carries
+# the structural template + event binding.
+
+name: airline-policy-v2
+version: "2.0"
+info: >
+  Predicate-heavy variant.  Every guard condition lives in predicates_v2.py;
+  the YAML is kept as thin as possible.
+authors:
+  - Silas
+
+activities:
+  - get_user_details(user_id:str)
+  - get_reservation_details(reservation_id:str)
+  - search_direct_flight(origin:str, destination:str, date:str)
+  - search_onestop_flight(origin:str, destination:str, date:str)
+  - get_flight_status(flight_number:str, date:str)
+  - book_reservation(user_id:str, origin:str, destination:str, flight_type:str, cabin:str, flights:str, passengers:str, payment_methods:str, total_baggages:int, nonfree_baggages:int, insurance:str)
+  - update_reservation_flights(reservation_id:str, cabin:str, flights:str, payment_id:str)
+  - update_reservation_baggages(reservation_id:str, total_baggages:int, nonfree_baggages:int, payment_id:str)
+  - update_reservation_passengers(reservation_id:str, passengers:str)
+  - cancel_reservation(reservation_id:str)
+  - send_certificate(user_id:str, amount:int)
+  - transfer_to_human_agents(summary:str)
+  - calculate(expression:str)
+  - list_all_airports()
+
+constraints:
+
+  # =========================================================================
+  # A. SEQUENCING — Identity & fact-gathering
+  # =========================================================================
+
+  - name: user-before-reservation-lookup
+    template: Precedence
+    first: get_reservation_details(reservation_id)
+    second: get_user_details(user_id)
+    description: "Obtain user context before reservation lookup."
+
+  - name: user-before-booking
+    template: Precedence
+    first: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+    second: get_user_details(uid)
+    description: "Before booking, retrieve user details first."
+
+  - name: user-before-flight-update
+    template: Precedence
+    first: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+    second: get_user_details(user_id)
+    description: "Before changing flights, verify user identity first."
+
+  - name: user-before-baggage-update
+    template: Precedence
+    first: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+    second: get_user_details(user_id)
+    description: "Before changing baggage, verify user identity first."
+
+  - name: user-before-passenger-update
+    template: Precedence
+    first: update_reservation_passengers(reservation_id, passengers)
+    second: get_user_details(user_id)
+    description: "Before changing passengers, verify user identity first."
+
+  - name: user-before-cancellation
+    template: Precedence
+    first: cancel_reservation(reservation_id)
+    second: get_user_details(user_id)
+    description: "Before cancellation, verify user identity first."
+
+  - name: user-before-compensation
+    template: Precedence
+    first: send_certificate(user_id, amount)
+    second: get_user_details(uid)
+    description: "Before compensation, verify user identity first."
+
+  - name: reservation-before-flight-update
+    template: Precedence
+    first: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+    second: get_reservation_details(rid)
+    description: "Before changing flights, inspect reservation details first."
+
+  - name: reservation-before-baggage-update
+    template: Precedence
+    first: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+    second: get_reservation_details(rid)
+    description: "Before changing baggage, inspect reservation details first."
+
+  - name: reservation-before-passenger-update
+    template: Precedence
+    first: update_reservation_passengers(reservation_id, passengers)
+    second: get_reservation_details(rid)
+    description: "Before changing passengers, inspect reservation details first."
+
+  - name: reservation-before-cancellation
+    template: Precedence
+    first: cancel_reservation(reservation_id)
+    second: get_reservation_details(rid)
+    description: "Before cancellation, inspect reservation details first."
+
+  # =========================================================================
+  # B. SEQUENCING — Booking flow
+  # =========================================================================
+
+  - name: search-direct-before-booking
+    template: Precedence
+    first: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+    second: search_direct_flight(orig, dest, date)
+    description: "Search for available flights before booking."
+
+  - name: search-onestop-before-booking
+    template: Precedence
+    first: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+    second: search_onestop_flight(orig, dest, date)
+    description: "Search for one-stop options before booking."
+
+  # =========================================================================
+  # C. SEQUENCING — Compensation flow
+  # =========================================================================
+
+  - name: reservation-before-certificate
+    template: Precedence
+    first: send_certificate(user_id, amount)
+    second: get_reservation_details(rid)
+    description: "Confirm reservation facts before issuing compensation."
+
+  - name: flight-status-before-certificate
+    template: Precedence
+    first: send_certificate(user_id, amount)
+    second: get_flight_status(flight_number, date)
+    description: "Confirm flight status facts before issuing compensation."
+
+  # =========================================================================
+  # D. TRANSFER IS TERMINAL
+  # =========================================================================
+
+  - name: no-booking-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+    description: "Do not continue with booking after transfer to human agent."
+
+  - name: no-flight-update-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+    description: "Do not continue with flight updates after transfer to human agent."
+
+  - name: no-baggage-update-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+    description: "Do not continue with baggage updates after transfer to human agent."
+
+  - name: no-passenger-update-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: update_reservation_passengers(reservation_id, passengers)
+    description: "Do not continue with passenger updates after transfer to human agent."
+
+  - name: no-cancellation-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: cancel_reservation(reservation_id)
+    description: "Do not continue with cancellation after transfer to human agent."
+
+  - name: no-compensation-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: send_certificate(user_id, amount)
+    description: "Do not continue with compensation after transfer to human agent."
+
+  # =========================================================================
+  # E. ARGUMENT GUARDS — Search: origin != destination
+  # =========================================================================
+
+  - name: search-direct-origin-ne-dest
+    template: Absence
+    first:
+      event: search_direct_flight(origin, destination, date)
+      where:
+        - same_airport(origin, destination)
+    description: "Origin and destination must differ when searching direct flights."
+
+  - name: search-onestop-origin-ne-dest
+    template: Absence
+    first:
+      event: search_onestop_flight(origin, destination, date)
+      where:
+        - same_airport(origin, destination)
+    description: "Origin and destination must differ when searching one-stop flights."
+
+  # =========================================================================
+  # F. ARGUMENT GUARDS — Booking (single predicate per concern)
+  # =========================================================================
+
+  - name: book-origin-ne-dest
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - same_airport(origin, destination)
+    description: "Origin and destination must differ when booking."
+
+  - name: book-invalid-baggages
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - invalid_baggage_counts(total_baggages, nonfree_baggages)
+    description: "Baggage counts must be non-negative and nonfree cannot exceed total."
+
+  - name: book-max-five-passengers
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - too_many_passengers(passengers)
+    description: "Each reservation can have at most five passengers."
+
+  - name: book-payment-method-limits
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - exceeds_payment_limits(payment_methods)
+    description: "Booking can use at most 1 travel certificate, 1 credit card, and 3 gift cards."
+
+  - name: book-payment-in-profile
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - invalid_payment_methods(payment_methods, user_id)
+    description: "All payment methods must be in the user profile."
+
+  # =========================================================================
+  # G. ARGUMENT GUARDS — Flight modification
+  # =========================================================================
+
+  - name: no-basic-economy-flight-modification
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - is_basic_economy(cabin)
+    description: "Basic economy flights cannot be modified."
+
+  - name: flight-update-preserves-route
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - route_changed(reservation_id, flights)
+    description: "Flight modification must not change origin, destination, or trip type."
+
+  - name: cabin-change-no-flown-flights
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - has_flown_flights(reservation_id)
+    description: "Cannot change cabin/flights if any flight has already been flown."
+
+  - name: flight-update-payment-not-certificate
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - is_certificate_payment(payment_id)
+    description: "Cannot use a certificate to pay for flight changes."
+
+  # =========================================================================
+  # H. ARGUMENT GUARDS — Baggage update
+  # =========================================================================
+
+  - name: baggage-update-invalid-counts
+    template: Absence
+    first:
+      event: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+      where:
+        - invalid_baggage_counts(total_baggages, nonfree_baggages)
+    description: "Baggage counts must be non-negative and nonfree cannot exceed total."
+
+  - name: baggage-only-add
+    template: Absence
+    first:
+      event: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+      where:
+        - baggage_decreased(reservation_id, total_baggages)
+    description: "Baggage can only be added, not removed."
+
+  - name: baggage-update-payment-not-certificate
+    template: Absence
+    first:
+      event: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+      where:
+        - is_certificate_payment(payment_id)
+    description: "Cannot use a certificate to pay for baggage changes."
+
+  # =========================================================================
+  # I. ARGUMENT GUARDS — Passenger update
+  # =========================================================================
+
+  - name: passenger-count-unchanged
+    template: Absence
+    first:
+      event: update_reservation_passengers(reservation_id, passengers)
+      where:
+        - passenger_count_changed(reservation_id, passengers)
+    description: "Cannot modify the number of passengers in a reservation."
+
+  # =========================================================================
+  # J. ARGUMENT GUARDS — Cancellation
+  # =========================================================================
+
+  - name: cancel-no-flown-flights
+    template: Absence
+    first:
+      event: cancel_reservation(reservation_id)
+      where:
+        - has_flown_flights(reservation_id)
+    description: "Cannot cancel a reservation if any flight has already been flown."
+
+  # =========================================================================
+  # K. ARGUMENT GUARDS — Certificate / compensation
+  # =========================================================================
+
+  - name: certificate-amount-invalid
+    template: Absence
+    first:
+      event: send_certificate(user_id, amount)
+      where:
+        - invalid_certificate_amount(amount)
+    description: "Certificate amount must be positive and at most $500."
+
+  - name: compensation-eligibility
+    template: Absence
+    first:
+      event: send_certificate(user_id, amount)
+      where:
+        - not compensation_eligible(user_id)
+    description: "Compensation only for silver/gold members, insured passengers, or business class."
+
+  - name: certificate-amount-valid
+    template: Absence
+    first:
+      event: send_certificate(user_id, amount)
+      where:
+        - not valid_certificate_amount(user_id, amount)
+    action: approve
+    description: "Certificate amount must match policy ($100/pax cancelled, $50/pax delayed)."

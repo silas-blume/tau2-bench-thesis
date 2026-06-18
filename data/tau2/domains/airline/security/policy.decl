@@ -1,0 +1,145 @@
+# Airline secure policy (Agent Declare source)
+# This model captures high-confidence airline rules from policy.md using
+# sequencing constraints plus argument-level guards.
+
+activity2 get_user_details
+activity2 get_reservation_details
+activity2 search_direct_flight
+activity2 search_onestop_flight
+activity2 get_flight_status
+activity2 book_reservation
+activity2 update_reservation_flights
+activity2 update_reservation_baggages
+activity2 update_reservation_passengers
+activity2 cancel_reservation
+activity2 send_certificate
+activity2 transfer_to_human_agents
+
+bind get_user_details: user_id |
+bind get_reservation_details: reservation_id |
+bind search_direct_flight: origin, destination, date |
+bind search_onestop_flight: origin, destination, date |
+bind get_flight_status: flight_number, date |
+bind book_reservation: user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance |
+bind update_reservation_flights: reservation_id, cabin, flights, payment_id |
+bind update_reservation_baggages: reservation_id, total_baggages, nonfree_baggages, payment_id |
+bind update_reservation_passengers: reservation_id, passengers |
+bind cancel_reservation: reservation_id |
+bind send_certificate: user_id, amount |
+bind transfer_to_human_agents: summary |
+
+# Typed domains used in variable conditions.
+flight_type: one_way, round_trip
+cabin: basic_economy, economy, business
+insurance: yes, no
+origin, destination: SFO, JFK, LAX, ORD, DFW, DEN, SEA, ATL, MIA, BOS, PHX, IAH, LAS, MCO, EWR, CLT, MSP, DTW, PHL, LGA
+total_baggages, nonfree_baggages: integer between 0 and 20
+amount: integer between -10000 and 10000
+
+# Identity and fact gathering before booking/modification/cancellation/refunds.
+Precedence[get_user_details, get_reservation_details] | | |
+"Obtain user context before reservation lookup."
+
+Precedence[get_user_details, book_reservation] | | |
+"Before booking, retrieve user details first."
+
+Precedence[get_user_details, update_reservation_flights] | | |
+"Before changing flights, verify user identity first."
+
+Precedence[get_user_details, update_reservation_baggages] | | |
+"Before changing baggage, verify user identity first."
+
+Precedence[get_user_details, update_reservation_passengers] | | |
+"Before changing passengers, verify user identity first."
+
+Precedence[get_user_details, cancel_reservation] | | |
+"Before cancellation, verify user identity first."
+
+Precedence[get_user_details, send_certificate] | | |
+"Before compensation, verify user identity first."
+
+Precedence[get_reservation_details, update_reservation_flights] | | |
+"Before changing flights, inspect reservation details first."
+
+Precedence[get_reservation_details, update_reservation_baggages] | | |
+"Before changing baggage, inspect reservation details first."
+
+Precedence[get_reservation_details, update_reservation_passengers] | | |
+"Before changing passengers, inspect reservation details first."
+
+Precedence[get_reservation_details, cancel_reservation] | | |
+"Before cancellation, inspect reservation details first."
+
+# Booking flow: search before booking.
+Precedence[search_direct_flight, book_reservation] | | |
+"Search for available flights before booking."
+
+Precedence[search_onestop_flight, book_reservation] | | |
+"Search for one-stop options before booking."
+
+# Refund/compensation flow: confirm facts before sending a certificate.
+Precedence[get_reservation_details, send_certificate] | | |
+"Confirm reservation facts before issuing compensation."
+
+Precedence[get_flight_status, send_certificate] | | |
+"Confirm flight status facts before issuing compensation."
+
+# Transfer should be terminal with respect to domain actions.
+NotResponse[transfer_to_human_agents, book_reservation] | | |
+"Do not continue with booking after transfer to human agent."
+
+NotResponse[transfer_to_human_agents, update_reservation_flights] | | |
+"Do not continue with flight updates after transfer to human agent."
+
+NotResponse[transfer_to_human_agents, update_reservation_baggages] | | |
+"Do not continue with baggage updates after transfer to human agent."
+
+NotResponse[transfer_to_human_agents, update_reservation_passengers] | | |
+"Do not continue with passenger updates after transfer to human agent."
+
+NotResponse[transfer_to_human_agents, cancel_reservation] | | |
+"Do not continue with cancellation after transfer to human agent."
+
+NotResponse[transfer_to_human_agents, send_certificate] | | |
+"Do not continue with compensation after transfer to human agent."
+
+# Variable-level guards from policy/tool invariants.
+Absence[search_direct_flight] | A.origin == A.destination | 
+"Origin and destination must differ when searching direct flights."
+
+Absence[search_onestop_flight] | A.origin == A.destination | 
+"Origin and destination must differ when searching one-stop flights."
+
+Absence[book_reservation] | A.origin == A.destination | 
+"Origin and destination must differ when booking."
+
+Absence[book_reservation] | (A.nonfree_baggages) > (A.total_baggages) | 
+"Non-free bag count cannot exceed total bag count for booking."
+
+Absence[book_reservation] | A.total_baggages < 0 | 
+"Total bag count cannot be negative for booking."
+
+Absence[book_reservation] | A.nonfree_baggages < 0 | 
+"Non-free bag count cannot be negative for booking."
+
+# Basic economy flights cannot be modified (only cabin change is allowed).
+Absence[update_reservation_flights] | A.cabin == basic_economy | 
+"Basic economy flights cannot be modified."
+
+# Baggage update argument guards.
+Absence[update_reservation_baggages] | A.total_baggages < 0 | 
+"Total bag count cannot be negative for baggage update."
+
+Absence[update_reservation_baggages] | A.nonfree_baggages < 0 | 
+"Non-free bag count cannot be negative for baggage update."
+
+Absence[update_reservation_baggages] | (A.nonfree_baggages) > (A.total_baggages) | 
+"Non-free bag count cannot exceed total bag count for baggage update."
+
+# Certificate amount guards.
+Absence[send_certificate] | A.amount <= 0 | 
+"Certificate amount must be positive."
+
+Absence[send_certificate] | A.amount > 500 | 
+"Certificate amount cannot exceed $500 (max 5 passengers x $100)."
+@approve
