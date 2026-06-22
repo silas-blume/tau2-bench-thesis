@@ -1,5 +1,6 @@
 import json
 import multiprocessing
+import os
 import random
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -151,12 +152,18 @@ def run_domain(config: RunConfig) -> Results:
     Run simulations for a domain
     """
     config.validate()
+    if config.sec_file is not None:
+        from tau2.domains.airline.utils import AIRLINE_DATA_DIR
+        sec_path = AIRLINE_DATA_DIR / "security" / config.sec_file
+        os.environ["TAU2_AIRLINE_POLICY_PATH"] = str(sec_path)
     ConsoleDisplay.display_run_config(config)
     if config.task_set_name is None:
         if not isinstance(config.domain, str):
             raise ValueError(f"Domain must be a string, got {type(config.domain)}")
-        if config.adv_tasks:
+        if config.task_set == "adv":
             task_set_name = f"{config.domain}-adv"
+        elif config.task_set == "paper":
+            task_set_name = f"{config.domain}-paper"
         else:
             task_set_name = config.domain
     else:

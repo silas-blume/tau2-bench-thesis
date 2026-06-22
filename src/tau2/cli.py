@@ -95,9 +95,11 @@ def add_run_args(parser):
         help="(Optional) run only the tasks with the given IDs. If not provided, will run all tasks.",
     )
     parser.add_argument(
-        "--adv-tasks",
-        action="store_true",
-        help="Run adversarial tasks instead of standard tasks (defaults to False).",
+        "--task-set",
+        type=str,
+        choices=["basic", "adv", "paper"],
+        default="basic",
+        help="Task set variant to run: 'basic' (default tasks.json), 'adv' (adv-tasks.json), or 'paper' (paper-tasks.json). Default is 'basic'.",
     )
     parser.add_argument(
         "--num-tasks",
@@ -153,6 +155,12 @@ def add_run_args(parser):
         default=DEFAULT_SOFT_AGENT,
         help="Use a soft agent instruction that allows policy deviation when requested by the user. Default is False.",
     )
+    parser.add_argument(
+        "--sec-file",
+        type=str,
+        default=None,
+        help="Security policy file for the airline agent, relative to data/tau2/domains/airline/security/ (e.g. policy_v3.yaml or policy.decl). Sets TAU2_AIRLINE_POLICY_PATH.",
+    )
 
 
 def main():
@@ -169,7 +177,7 @@ def main():
                 task_set_name=args.task_set_name,
                 task_split_name=args.task_split_name,
                 task_ids=args.task_ids,
-                adv_tasks=args.adv_tasks,
+                task_set=args.task_set,
                 num_tasks=args.num_tasks,
                 is_remote=False,
                 agent=args.agent,
@@ -187,6 +195,7 @@ def main():
                 log_level=args.log_level,
                 enforce_communication_protocol=args.enforce_communication_protocol,
                 soft_agent=args.soft_agent,
+                sec_file=args.sec_file,
             )
         )
     )

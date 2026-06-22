@@ -70,11 +70,18 @@ class RunConfig(BaseModel):
             default=None,
         ),
     ]
-    adv_tasks: Annotated[
-        bool,
+    task_set: Annotated[
+        str,
         Field(
-            description="Whether to run adversarial tasks",
-            default=False,
+            description="The task set variant to run: 'basic' (default tasks.json), 'adv' (adv-tasks.json), or 'paper' (paper-tasks.json).",
+            default="basic",
+        ),
+    ]
+    sec_file: Annotated[
+        Optional[str],
+        Field(
+            description="Security policy file for the airline agent, relative to data/tau2/domains/airline/security/. Sets TAU2_AIRLINE_POLICY_PATH.",
+            default=None,
         ),
     ]
     num_tasks: Annotated[

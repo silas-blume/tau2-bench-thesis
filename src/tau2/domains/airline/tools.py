@@ -336,7 +336,7 @@ class AirlineTools(ToolKitBase):  # Tools
         return str(round(float(eval(expression, {"__builtins__": None}, {})), 2))
 
     @is_tool(ToolType.WRITE)
-    def cancel_reservation(self, reservation_id: str) -> Reservation:
+    def cancel_reservation(self, reservation_id: str, reason: Optional[str]) -> Reservation:
         """
         Cancel the whole reservation.
 

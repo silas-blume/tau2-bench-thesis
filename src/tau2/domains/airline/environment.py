@@ -8,6 +8,7 @@ from tau2.domains.airline.tools import AirlineTools
 from tau2.domains.airline.utils import (
     AIRLINE_ADV_TASK_SET_PATH,
     AIRLINE_DB_PATH,
+    AIRLINE_PAPER_TASK_SET_PATH,
     AIRLINE_POLICY_PATH,
     AIRLINE_TASK_SET_PATH,
 )
@@ -48,6 +49,12 @@ def get_tasks(task_split_name: Optional[str] = "base") -> list[Task]:
 
 def get_adv_tasks(task_split_name: Optional[str] = None) -> list[Task]:
     tasks = load_file(AIRLINE_ADV_TASK_SET_PATH)
+    tasks = [Task.model_validate(task) for task in tasks]
+    return tasks
+
+
+def get_paper_tasks(task_split_name: Optional[str] = None) -> list[Task]:
+    tasks = load_file(AIRLINE_PAPER_TASK_SET_PATH)
     tasks = [Task.model_validate(task) for task in tasks]
     return tasks
 

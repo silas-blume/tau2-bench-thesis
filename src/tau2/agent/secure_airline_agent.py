@@ -123,16 +123,16 @@ class SecureAirlineAgent(SecureLangGraphAdapter):
 			raise FileNotFoundError(f"Agent Declare policy file not found: {policy_path}")
 
 		# Resolve predicate file: explicit env-var > convention > None.
-		predicate_env = os.environ.get("TAU2_AIRLINE_PREDICATE_PATH")
-		if predicate_env:
-			predicate_path: Path | None = Path(predicate_env)
-		else:
+		#predicate_env = os.environ.get("TAU2_AIRLINE_PREDICATE_PATH")
+		#if predicate_env:
+		#	predicate_path: Path | None = Path(predicate_env)
+		#else:
 			# Convention: predicates file lives next to the policy file
 			# and shares its stem (policy_v2.yaml -> predicates_v2.py).
-			stem = policy_path.stem  # e.g. "policy", "policy_v2"
-			pred_stem = stem.replace("policy", "predicates", 1)
-			candidate = policy_path.parent / f"{pred_stem}.py"
-			predicate_path = candidate if candidate.exists() else None
+		stem = policy_path.stem  # e.g. "policy", "policy_v2"
+		pred_stem = stem.replace("policy", "predicates", 1)
+		candidate = policy_path.parent / f"{pred_stem}.py"
+		predicate_path = candidate if candidate.exists() else None
 
 		constraints = AgentDeclareConstraints().parse_from_file(
 			str(policy_path),
