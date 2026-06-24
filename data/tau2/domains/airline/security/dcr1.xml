@@ -4,8 +4,8 @@
 
     Encodable rules (structural/sequencing constraints only):
       - Identity must be established before any booking, lookup, modification, cancellation, or compensation
-      - Reservation details must be fetched before modifying or cancelling
-      - Flight status must be confirmed before issuing a compensation certificate
+      - Reservation details must be fetched before modifying, cancelling, or issuing compensation
+      - Flight status must be confirmed before modifying flights, cancelling, or issuing a compensation certificate
       - Direct flights must be searched before one-stop alternatives
       - Transfer to human agent is terminal: disables all write actions
 
@@ -13,7 +13,7 @@
       - Max 5 passengers per reservation
       - At most 1 credit card, 3 gift cards, 1 travel certificate per booking
       - Payment methods must be in user profile
-      - Basic economy reservations cannot have flights modified
+      - Basic economy reservations cannot have flights modified (cabin change still allowed)
       - Route (origin/destination/trip type) cannot change on flight update
       - Baggage can only be added, not removed
       - Passenger count cannot be changed
@@ -185,6 +185,32 @@
           Rule: flight-status-before-certificate (Precedence in YAML)
         -->
         <condition sourceId="get_flight_status" targetId="send_certificate"/>
+
+        <!--
+          Flight status check before flight modification:
+          Policy: "Cabin cannot be changed if any flight in the reservation has already been flown."
+          The agent must call get_flight_status to determine flown status before modifying.
+          Rule: flight-status-before-flight-update
+        -->
+        <condition sourceId="get_flight_status" targetId="update_reservation_flights"/>
+
+        <!--
+          Flight status check before cancellation:
+          Policy: "If any portion of the flight has already been flown, the agent cannot help
+                   and transfer is needed."
+          The agent must call get_flight_status to determine flown status before cancelling.
+          Rule: flight-status-before-cancellation
+        -->
+        <condition sourceId="get_flight_status" targetId="cancel_reservation"/>
+
+        <!--
+          Reservation details before compensation:
+          Policy: "Always confirms the facts before offering compensation."
+          The agent needs reservation details (passenger count, cabin, insurance) to determine
+          eligibility and the correct certificate amount.
+          Rule: reservation-before-compensation
+        -->
+        <condition sourceId="get_reservation_details" targetId="send_certificate"/>
 
         <!--
           Direct flight search before one-stop search:
