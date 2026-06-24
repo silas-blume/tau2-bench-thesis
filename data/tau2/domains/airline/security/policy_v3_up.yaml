@@ -1,0 +1,154 @@
+
+constraints:
+
+## Book flight
+
+  - name: user-before-booking
+    template: Precedence
+    first: get_user_details(uid)
+    second: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+    where:
+      - user_id == uid
+    description: "Before booking, retrieve user details first."
+
+  - name: book-max-five-passengers
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - count_items(passengers) > 5
+    description: "Each reservation can have at most five passengers."
+
+  - name: all-passengers-data
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - pass_info_complete(passengers) # TODO
+    description: "For each passenger first name, second name and date of birth must be provided."
+
+  - name: book-too-many-credit-cards
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - count_credit_cards(payment_methods) > 1
+    description: "Booking can use at most 1 credit card."
+
+  - name: book-too-many-gift-cards
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - count_gift_cards(payment_methods) > 3
+    description: "Booking can use at most 3 gift cards."
+
+  - name: book-too-many-certificates
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - count_certificates(payment_methods) > 1
+    description: "Booking can use at most 1 travel certificate."
+
+  - name: book-payment-in-profile
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - has_unknown_payment(payment_methods, user_id)
+    description: "All payment methods must be in the user profile beforehand."
+
+  - name: baggage-regular-basic-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "basic_economy"
+        - user_membership_level(user_id) == "regular"
+        - total_baggages - nonfree_baggages == 0
+    description: "Regular basic economy flights allow no free baggage."
+
+  - name: baggage-regular-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "economy"
+        - user_membership_level(user_id) == "regular"
+        - total_baggages - nonfree_baggages == 1
+    description: "Regular economy flights allow 1 free checked baggage."
+
+  - name: baggage-regular-business
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "business"
+        - user_membership_level(user_id) == "regular"
+        - total_baggages - nonfree_baggages == 2
+    description: "Regular business flights allow 2 free checked baggages."
+
+  - name: baggage-silver-basic-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "basic_economy"
+        - user_membership_level(user_id) == "silver"
+        - total_baggages - nonfree_baggages == 1
+    description: "Silver basic economy flights allow 1 free checked baggage."
+
+  - name: baggage-silver-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "economy"
+        - user_membership_level(user_id) == "silver"
+        - total_baggages - nonfree_baggages == 2
+    description: "Silver economy flights allow 2 free checked baggages."
+
+  - name: baggage-silver-business
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "business"
+        - user_membership_level(user_id) == "silver"
+        - total_baggages - nonfree_baggages == 3
+    description: "Silver business flights allow 3 free checked baggages."
+
+  - name: baggage-gold-basic-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "basic_economy"
+        - user_membership_level(user_id) == "gold"
+        - total_baggages - nonfree_baggages == 2
+    description: "Gold basic economy flights allow 2 free checked baggages."
+
+  - name: baggage-gold-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "economy"
+        - user_membership_level(user_id) == "gold"
+        - total_baggages - nonfree_baggages == 3
+    description: "Gold economy flights allow 3 free checked baggages."
+
+  - name: baggage-gold-business
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "business"
+        - user_membership_level(user_id) == "gold"
+        - total_baggages - nonfree_baggages == 4
+    description: "Gold business flights allow 4 free checked baggages."
+
+
+## Modify flight
+

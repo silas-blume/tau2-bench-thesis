@@ -194,12 +194,33 @@ def route_changed(reservation_id: Any, flights: Any) -> bool:
 
     if not origins or not dests:
         return False
-    if origins[0] != res.origin or dests[-1] != res.destination:
+    # Always check origin
+    if origins[0] != res.origin:
         return True
-    if res.flight_type == "round_trip" and len(parsed) < 2:
-        return True
+    # Trip-type check: round_trip requires >= 2 submitted flights
+    if res.flight_type == "round_trip":
+        if len(parsed) < 2:
+            return True
+        # For round-trip, the outbound destination must appear in the submitted
+        # flights. (The last flight returns to origin, so dests[-1] != res.destination
+        # is expected and must NOT be used as the destination check here.)
+        if res.destination not in dests:
+            return True
+    else:
+        # One-way: the last flight must land at the booking destination
+        if dests[-1] != res.destination:
+            return True
     return False
 
+def reservation_user_id(reservation_id: Any) -> str:
+    """Return the user_id associated with a reservation (DB lookup)."""
+    db = _get_db()
+    if db is None:
+        return ""
+    rid = str(reservation_id)
+    if rid not in db.reservations:
+        return ""
+    return db.reservations[rid].user_id
 
 def compensation_eligible(user_id: Any) -> bool:
     """Return True if the user qualifies for compensation.
@@ -278,3 +299,175 @@ def valid_certificate_amount(user_id: Any, amount: Any) -> bool:
         if delayed:
             valid.add(50 * npax)
     return amt in valid if valid else True
+
+
+def all_flights_available(flights: Any) -> bool:
+    """Return True if all flights in the list have status 'available'."""
+    db = _get_db()
+    if db is None:
+        return True
+    parsed = _parse_json_if_str(flights)
+    if not isinstance(parsed, list):
+        return True
+    for f in parsed:
+        fn = f.get("flight_number", "") if isinstance(f, dict) else str(getattr(f, "flight_number", ""))
+        dt = f.get("date", "") if isinstance(f, dict) else str(getattr(f, "date", ""))
+        if not fn or not dt:
+            continue
+        if fn not in db.flights or dt not in db.flights[fn].dates:
+            continue
+        if db.flights[fn].dates[dt].status != "available":
+            return False
+    return True
+
+def reservation_destination(reservation_id: Any) -> str:
+    """Return the destination of a reservation (DB lookup)."""
+    db = _get_db()
+    if db is None:
+        return ""
+    rid = str(reservation_id)
+    if rid not in db.reservations:
+        return ""
+    return db.reservations[rid].destination
+    
+def reservation_origin(reservation_id: Any) -> str:
+    """Return the origin of a reservation (DB lookup)."""
+    db = _get_db()
+    if db is None:
+        return ""
+    rid = str(reservation_id)
+    if rid not in db.reservations:
+        return ""
+    return db.reservations[rid].origin
+
+
+# ===========================================================================
+# Flight-update helpers — resolve field values from a submitted flight list
+# ===========================================================================
+
+def flight_update_origin(flights: Any) -> str:
+    """Return the origin airport of the first flight in the submitted list.
+
+    Correctly identifies the departure point for both one-way and round-trip
+    updates (the journey always starts at the first flight's origin).
+    Used by the no-change-origin rule.
+    """
+    parsed = _parse_json_if_str(flights)
+    if not isinstance(parsed, list) or not parsed:
+        return ""
+    db = _get_db()
+    if db is None:
+        return ""
+    first = parsed[0]
+    fn = first.get("flight_number", "") if isinstance(first, dict) else str(getattr(first, "flight_number", ""))
+    if fn and fn in db.flights:
+        return db.flights[fn].origin
+    return ""
+
+
+def flight_update_trip_type(flights: Any) -> str:
+    """Infer the trip type of the submitted flight list.
+
+    Returns 'round_trip' when the first flight's origin equals the last
+    flight's destination (the journey returns to its starting point).
+    Returns 'one_way' otherwise.  Returns '' on lookup failure.
+    Used by the no-change-type rule.
+    """
+    parsed = _parse_json_if_str(flights)
+    if not isinstance(parsed, list) or not parsed:
+        return ""
+    if len(parsed) == 1:
+        return "one_way"
+    db = _get_db()
+    if db is None:
+        return ""
+
+    def _fn(f: Any) -> str:
+        return f.get("flight_number", "") if isinstance(f, dict) else str(getattr(f, "flight_number", ""))
+
+    first_fn = _fn(parsed[0])
+    last_fn = _fn(parsed[-1])
+    if not first_fn or not last_fn:
+        return ""
+    if first_fn not in db.flights or last_fn not in db.flights:
+        return ""
+    if db.flights[first_fn].origin == db.flights[last_fn].destination:
+        return "round_trip"
+    return "one_way"
+
+
+def reservation_trip_type(reservation_id: Any) -> str:
+    """Return the flight_type of a reservation ('one_way' or 'round_trip').
+
+    Used by the no-change-type rule together with flight_update_trip_type.
+    """
+    db = _get_db()
+    if db is None:
+        return ""
+    rid = str(reservation_id)
+    if rid not in db.reservations:
+        return ""
+    return db.reservations[rid].flight_type
+
+
+# ===========================================================================
+# Cancellation eligibility
+# ===========================================================================
+
+def cancellation_eligible(reservation_id: Any) -> bool:
+    """Return True if the reservation is eligible for cancellation per policy.
+
+    Eligible when any of the following hold:
+      - Business class reservation (always refundable/cancellable)
+      - Travel insurance is present (health/weather cancellations covered)
+      - At least one flight in the reservation was cancelled by the airline
+
+    NOTE: The 24-hour booking window criterion is deliberately NOT checked here
+    because predicates execute against the live DB clock, which would always
+    fail for historical simulation scenarios.  Agents must verify the 24h
+    window themselves per policy.md.
+    """
+    db = _get_db()
+    if db is None:
+        return True  # fail open; agent must still verify
+    rid = str(reservation_id)
+    if rid not in db.reservations:
+        return False
+    res = db.reservations[rid]
+    # Business class is always cancellable with a refund
+    if res.cabin == "business":
+        return True
+    # Travel insurance covers health/weather cancellations
+    if res.insurance == "yes":
+        return True
+    # Airline-cancelled flight: customer is entitled to a full refund
+    for fi in res.flights:
+        fn, dt = fi.flight_number, fi.date
+        if fn in db.flights and dt in db.flights[fn].dates:
+            if db.flights[fn].dates[dt].status == "cancelled":
+                return True
+    return False
+
+
+def user_membership_level(user_id: Any) -> str:
+    """Return the membership level of a user ('regular', 'silver', 'gold')."""
+    db = _get_db()
+    if db is None:
+        return "regular"
+    uid = str(user_id)
+    if uid not in db.users:
+        return "regular"
+    return db.users[uid].membership
+
+
+def pass_info_complete(passengers: Any) -> bool:
+    """Return true if all passengers have complete information (first name, last name, date of birth)."""
+    parsed = _parse_json_if_str(passengers)
+    if not isinstance(parsed, list) or not parsed:
+        return False
+    for p in parsed:
+        if not isinstance(p, dict):
+            return False
+        if not p.get("first_name") or not p.get("last_name") or not p.get("dob"):
+            return False
+    return True

@@ -15,12 +15,16 @@ _SECURE_LANGGRAPH_IMPORT_ERROR: Exception | None = None
 AgentDeclareConstraints: Any = None
 DeclareTraceValidator: Any = None
 TraceCollector: Any = None
+AgentDCRConstraints: Any = None
+DCRStateValidator: Any = None
 try:
 	from thesis_dpm_secure_langgraph import (
 		AgentDeclareConstraints,
 		DeclareTraceValidator,
 		TraceCollector,
+		AgentDCRConstraints,
 	)
+	from thesis_dpm_secure_langgraph.validation.dcr_state_validator import DCRStateValidator
 except Exception as exc:
 	# Keep module importable so unrelated TAU2 commands still work when
 	# optional secure-agent dependencies are not installed.
@@ -90,6 +94,8 @@ class SecureAirlineAgent(SecureLangGraphAdapter):
 		assert AgentDeclareConstraints is not None
 		assert DeclareTraceValidator is not None
 		assert TraceCollector is not None
+		assert AgentDCRConstraints is not None
+		assert DCRStateValidator is not None
 
 		llm_args = deepcopy(llm_args) if llm_args is not None else {}
 
@@ -120,25 +126,28 @@ class SecureAirlineAgent(SecureLangGraphAdapter):
 			)
 		)
 		if not policy_path.exists():
-			raise FileNotFoundError(f"Agent Declare policy file not found: {policy_path}")
+			raise FileNotFoundError(f"Agent policy file not found: {policy_path}")
 
-		# Resolve predicate file: explicit env-var > convention > None.
-		#predicate_env = os.environ.get("TAU2_AIRLINE_PREDICATE_PATH")
-		#if predicate_env:
-		#	predicate_path: Path | None = Path(predicate_env)
-		#else:
-			# Convention: predicates file lives next to the policy file
-			# and shares its stem (policy_v2.yaml -> predicates_v2.py).
-		stem = policy_path.stem  # e.g. "policy", "policy_v2"
-		pred_stem = stem.replace("policy", "predicates", 1)
-		candidate = policy_path.parent / f"{pred_stem}.py"
-		predicate_path = candidate if candidate.exists() else None
-
-		constraints = AgentDeclareConstraints().parse_from_file(
-			str(policy_path),
-			predicate_file_path=predicate_path,
-		)
-		validator = DeclareTraceValidator(constraints)
+		if policy_path.suffix == ".xml":
+			# DCR graph — auto-detect data-aware vs standard by sniffing the file.
+			xml_text = policy_path.read_text(encoding="utf-8")
+			if "<dataType" in xml_text or "<dataMappings" in xml_text:
+				constraints = AgentDCRConstraints().parse_data_from_file(str(policy_path))
+			else:
+				constraints = AgentDCRConstraints().parse_from_file(str(policy_path))
+			validator = DCRStateValidator(constraints)
+			predicate_path = None
+		else:
+			# Declare / YAML policy — resolve optional predicate file by convention.
+			stem = policy_path.stem  # e.g. "policy", "policy_v2"
+			pred_stem = stem.replace("policy", "predicates", 1)
+			candidate = policy_path.parent / f"{pred_stem}.py"
+			predicate_path = candidate if candidate.exists() else None
+			constraints = AgentDeclareConstraints().parse_from_file(
+				str(policy_path),
+				predicate_file_path=predicate_path,
+			)
+			validator = DeclareTraceValidator(constraints)
 
 		default_log_dir = (
 			Path(__file__).resolve().parents[3]
@@ -153,13 +162,15 @@ class SecureAirlineAgent(SecureLangGraphAdapter):
 		self._secure_logger = setup_logger(self._secure_log_dir / "agent.log")
 		self._trace_path = self._secure_log_dir / f"trace_events_{uuid.uuid4().hex}.json"
 
+		# result_aliases and bind_schemas are Declare-specific; omit for DCR.
+		has_declare_meta = hasattr(constraints, "get_result_aliases")
 		trace_collector = TraceCollector(
 			trace_id=uuid.uuid4(),
 			auto_record_agent_start_on_first_run=True,
 			verbose=True,
 			logger=self._secure_logger,
-			result_aliases=constraints.get_result_aliases(),
-			bind_schemas=constraints.get_bind_schemas(),
+			result_aliases=constraints.get_result_aliases() if has_declare_meta else None,
+			bind_schemas=constraints.get_bind_schemas() if has_declare_meta else None,
 		)
   
 

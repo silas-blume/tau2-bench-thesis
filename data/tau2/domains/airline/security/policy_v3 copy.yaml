@@ -42,7 +42,6 @@ constraints:
       - user_id == reservation_user_id(reservation_id)
     description: "Obtain user context before reservation lookup."
 
-
   - name: user-before-flight-update
     template: Precedence
     first: get_user_details(user_id)
@@ -321,55 +320,21 @@ constraints:
   #    (predicate needed: must parse JSON list and count)
   # =========================================================================
 
-  - name: book-max-five-passengers
-    template: Absence
-    first:
-      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
-      where:
-        - count_items(passengers) > 5
-    description: "Each reservation can have at most five passengers."
+
 
   # =========================================================================
   # K. ARGUMENT GUARDS — Booking: payment method limits
   #    (predicate needed: must parse JSON list and classify)
   # =========================================================================
 
-  - name: book-too-many-credit-cards
-    template: Absence
-    first:
-      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
-      where:
-        - count_credit_cards(payment_methods) > 1
-    description: "Booking can use at most 1 credit card."
 
-  - name: book-too-many-gift-cards
-    template: Absence
-    first:
-      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
-      where:
-        - count_gift_cards(payment_methods) > 3
-    description: "Booking can use at most 3 gift cards."
-
-  - name: book-too-many-certificates
-    template: Absence
-    first:
-      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
-      where:
-        - count_certificates(payment_methods) > 1
-    description: "Booking can use at most 1 travel certificate."
 
   # =========================================================================
   # L. ARGUMENT GUARDS — Payment methods in user profile
   #    (predicate needed: DB lookup)
   # =========================================================================
 
-  - name: book-payment-in-profile
-    template: Absence
-    first:
-      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
-      where:
-        - has_unknown_payment(payment_methods, user_id)
-    description: "All payment methods must be in the user profile beforehand."
+
 
 
   - name: book-flights-available
