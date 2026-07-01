@@ -1,0 +1,66 @@
+title: "Airline Agent Policy"
+# Source file for dcr1.xml.  Compile with:
+#   python scripts/compile_dcr_yaml.py data/tau2/domains/airline/security/dcr1.yaml
+#
+# Standard DCR (no data events, no guarded relations).
+# All events are void; all relations are unguarded.
+# Constraints encodable here are sequencing/precedence rules only.
+# Data-dependent rules (eligibility, counts, amounts) require dcr2.yaml.
+
+events:
+  get_user_details: "User details could not be retrieved at this point."
+  get_reservation_details: "Reservation details cannot be looked up before user identity is established. Call get_user_details first."
+  search_direct_flight: "Direct flight search is not available at this point."
+  search_onestop_flight: "One-stop flights cannot be searched before direct flights have been searched. Call search_direct_flight first."
+  get_flight_status: "Flight status lookup is not available at this point."
+  book_reservation: "A reservation cannot be booked before user identity is established. Call get_user_details first. This action is also unavailable after transfer to a human agent."
+  update_reservation_flights: "Flight modifications require user identity, reservation details, and flight status to be retrieved first. This action is also unavailable after transfer to a human agent."
+  update_reservation_baggages: "Baggage updates require user identity and reservation details to be retrieved first. This action is also unavailable after transfer to a human agent."
+  update_reservation_passengers: "Passenger updates require user identity and reservation details to be retrieved first. This action is also unavailable after transfer to a human agent."
+  cancel_reservation: "A reservation cannot be cancelled before user identity, reservation details, and flight status are retrieved. This action is also unavailable after transfer to a human agent."
+  send_certificate: "A compensation certificate cannot be issued before user identity, reservation details, and flight status are confirmed. This action is also unavailable after transfer to a human agent."
+  transfer_to_human_agents: "Transfer to a human agent is not available at this point."
+  calculate: "The calculate action is not available at this point."
+  list_all_airports: "The list all airports action is not available at this point."
+
+
+conditions:
+  # Identity before every write action and lookup
+  get_user_details:
+    - book_reservation
+    - get_reservation_details
+    - update_reservation_flights
+    - update_reservation_baggages
+    - update_reservation_passengers
+    - cancel_reservation
+    - send_certificate
+  # Reservation details before modification and cancellation
+  get_reservation_details:
+    - update_reservation_flights
+    - update_reservation_baggages
+    - update_reservation_passengers
+    - cancel_reservation
+    - send_certificate
+  # Flight status before modification, cancellation, and compensation
+  get_flight_status:
+    - update_reservation_flights
+    - cancel_reservation
+    - send_certificate
+  # Direct flight search before one-stop
+  search_direct_flight:
+    - search_onestop_flight
+
+
+# Transfer to human agent is terminal — disables all write actions.
+excludes:
+  transfer_to_human_agents:
+    - book_reservation
+    - update_reservation_flights
+    - update_reservation_baggages
+    - update_reservation_passengers
+    - cancel_reservation
+    - send_certificate
+
+
+marking:
+  included: all

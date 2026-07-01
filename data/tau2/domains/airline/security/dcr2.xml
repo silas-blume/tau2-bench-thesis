@@ -1,741 +1,261 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dcrgraph title="Airline Agent Policy — Data-Aware (XML_DCR_DATA)">
-  <!--
-    Data-aware DCR encoding of the Airline Agent Policy.
-    Load with: pm4py.objects.dcr.importer.importer.apply(path, variant=XML_DCR_DATA)
-
-    Approach
-    ════════
-    Tool-call arguments and database facts that the YAML policy checks via predicates
-    are modelled here as separate DCR data events:
-
-      * Input data events  (decision="?", dataType="int"|"bool")
-            Executed by the environment/agent to record a scalar fact or argument
-            value before the corresponding action event fires.
-
-      * Decision events    (decision="<expr>", dataType="bool"|"int")
-            Compute a combined validity check from the recorded input values.
-
-      * Guarded include/exclude relations
-            When a decision event fires with a passing value  -> re-includes the
-            action event (guard: [decision_event]).
-            When it fires with a failing value -> excludes the action event
-            (guard: (not [decision_event])).
-
-    Constraints encodable vs dcr1.xml
-    ════════════════════════════════════════════
-      Added structural conditions (also added to dcr1.xml):
-        * get_flight_status required before cancel_reservation and update_reservation_flights
-        * get_reservation_details required before send_certificate
-
-      Booking
-        * <= 5 passengers per reservation
-        * <= 1 credit card, <= 3 gift cards, <= 1 travel certificate
-        * All payment methods must be in user profile (boolean fact check)
-
-      Modification
-        * Cannot change flights on a basic economy reservation
-        * Cannot change flights or cabin if any flight already flown
-        * Payment method for modification must be in user profile (boolean fact check)
-
-      Cancellation
-        * Cannot cancel if any flight already flown
-        * Must be eligible: business class OR airline-cancelled OR insured OR booking within 24 h
-          — the 24-hour window is now explicitly modelled as a separate boolean input event and
-            composed via OR into reservation_cancellation_eligible
-
-      Baggage update
-        * Bags can only be added, not removed (new_total >= current)
-
-      Passenger update
-        * Number of passengers cannot change (new_count == current_count)
-
-      Compensation
-        * User must be eligible (silver/gold member, insured, or business class)
-        * Certificate amount must be $100 x pax (cancelled) or $50 x pax (delayed)
-
-    Still not encodable (require non-scalar DB lookups or NL reasoning)
-    ════════════════════════════════════════════════════════════════════
-      * Passenger data completeness (first name / last name / DOB per passenger)
-      * Route preservation check (flight numbers -> origin/destination from DB)
-      * Payment method set membership (cross-entity lookup);
-        approximated here by boolean input events booking_payment_methods_valid
-        and update_payment_in_profile which the environment must set.
-
-    Model limitation
-    ════════════════
-    update_reservation_flights handles both flight changes AND cabin-only changes.
-    The policy forbids flight changes for basic economy but allows cabin changes.
-    In this model, reservation_is_basic_economy excludes update_reservation_flights
-    entirely (conservative approximation).  A finer model would split the event
-    into update_reservation_segments (blocked for basic economy) and
-    update_reservation_cabin (always allowed), but that requires the validator to
-    route the tool call to the correct DCR event based on the arguments.
-  -->
-
   <specification>
     <resources>
-
       <events>
-
-        <!-- =================================================================
-             STRUCTURAL EVENTS  (void - identical to dcr1.xml)
-             ================================================================= -->
-
-        <event id="get_user_details"
-               description="User details could not be retrieved at this point."/>
-        <event id="get_reservation_details"
-               description="Reservation details cannot be looked up before user identity is established. Call get_user_details first."/>
-        <event id="search_direct_flight"
-               description="Direct flight search is not available at this point."/>
-        <event id="search_onestop_flight"
-               description="One-stop flights cannot be searched before direct flights have been searched. Call search_direct_flight first."/>
-        <event id="get_flight_status"
-               description="Flight status lookup is not available at this point."/>
-        <event id="book_reservation"
-               description="Reservation cannot be booked. Ensure: (1) get_user_details called, (2) booking_params_valid confirms &lt;=5 passengers, &lt;=1 credit card, &lt;=3 gift cards, &lt;=1 certificate, (3) booking_payment_methods_valid confirms payment methods are in user profile. Also unavailable after transfer to human agent."/>
-        <event id="update_reservation_flights"
-               description="Flight/cabin update is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) reservation_is_basic_economy is false (for flight changes), (4) update_payment_in_profile confirms payment method is in user profile. Also unavailable after transfer to human agent."/>
-        <event id="update_reservation_baggages"
-               description="Baggage update is blocked. Ensure: (1) get_user_details and get_reservation_details called, (2) bags_add_only_valid confirms new total &gt;= current. Also unavailable after transfer to human agent."/>
-        <event id="update_reservation_passengers"
-               description="Passenger update is blocked. Ensure: (1) get_user_details and get_reservation_details called, (2) passenger_count_unchanged_valid confirms the passenger count has not changed. Also unavailable after transfer to human agent."/>
-        <event id="cancel_reservation"
-               description="Cancellation is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) reservation_cancellation_eligible confirms eligibility (business class, airline-cancelled, insured, or booking within 24 h). Also unavailable after transfer to human agent."/>
-        <event id="send_certificate"
-               description="Certificate cannot be issued. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) user_compensation_eligible is true, (3) certificate_amount_valid confirms amount equals $100 x pax (cancelled) or $50 x pax (delayed). Also unavailable after transfer to human agent."/>
-        <event id="transfer_to_human_agents"
-               description="Transfer to a human agent is not available at this point."/>
-        <event id="calculate"
-               description="The calculate action is not available at this point."/>
-        <event id="list_all_airports"
-               description="The list all airports action is not available at this point."/>
-
-        <!-- =================================================================
-             BOOKING PARAMETER DATA EVENTS
-             Input events that record scalar aspects of a booking request.
-             Must all fire before booking_params_valid computes validity,
-             which must fire before book_reservation.
-             ================================================================= -->
-
-        <!-- Number of passengers being booked -->
-        <event id="booking_num_passengers"
-               dataType="int" decision="?"
-               description="Provide the number of passengers in the booking request (policy limit: &lt;= 5)."/>
-        <!-- Number of credit cards in the payment methods list -->
-        <event id="booking_num_credit_cards"
-               dataType="int" decision="?"
-               description="Provide the number of credit cards in the booking payment methods (policy limit: &lt;= 1)."/>
-        <!-- Number of gift cards in the payment methods list -->
-        <event id="booking_num_gift_cards"
-               dataType="int" decision="?"
-               description="Provide the number of gift cards in the booking payment methods (policy limit: &lt;= 3)."/>
-        <!-- Number of travel certificates in the payment methods list -->
-        <event id="booking_num_certificates"
-               dataType="int" decision="?"
-               description="Provide the number of travel certificates in the booking payment methods (policy limit: &lt;= 1)."/>
-
-        <!--
-          Combined booking parameter validity (decision event).
-          True iff: passengers <= 5  AND  credit cards <= 1
-                    gift cards  <= 3  AND  certificates <= 1
-          Rules: book-max-five-passengers, book-too-many-credit-cards,
-                 book-too-many-gift-cards, book-too-many-certificates
-        -->
-        <event id="booking_params_valid"
-               dataType="bool"
-               decision="[booking_num_passengers] &lt;= 5 and [booking_num_credit_cards] &lt;= 1 and [booking_num_gift_cards] &lt;= 3 and [booking_num_certificates] &lt;= 1"
-               description="Booking parameter validation failed: check passengers &lt;= 5, credit cards &lt;= 1, gift cards &lt;= 3, travel certificates &lt;= 1."/>
-
-        <!--
-          True iff all payment methods in the booking request are already in the user profile.
-          This cannot be verified from scalar arguments alone (requires DB set membership),
-          so it is modelled as a boolean input event that the environment must set.
-          Rule: book-payment-in-profile
-        -->
-        <event id="booking_payment_methods_valid"
-               dataType="bool" decision="?"
-               description="Provide whether all payment methods in the booking are in the user profile. Policy: all payment methods must already be in user profile for safety reasons."/>
-
-        <!-- =================================================================
-             RESERVATION FACT DATA EVENTS
-             Input events recording facts about the current reservation.
-             Provided by the environment after get_reservation_details fires.
-             ================================================================= -->
-
-        <!-- True iff reservation cabin class is basic economy -->
-        <event id="reservation_is_basic_economy"
-               dataType="bool" decision="?"
-               description="Provide whether the reservation cabin class is basic economy."/>
-
-        <!-- True iff at least one flight in the reservation has already been flown -->
-        <event id="reservation_has_flown"
-               dataType="bool" decision="?"
-               description="Provide whether any flight in the reservation has already departed/flown."/>
-
-        <!--
-          Base cancellation eligibility (without the 24-hour window).
-          True iff: business class OR airline-cancelled OR travel insurance with covered reason.
-          Rule: cancel-not-eligible (partial)
-        -->
-        <event id="reservation_cancellation_eligible_base"
-               dataType="bool" decision="?"
-               description="Provide whether the reservation is eligible for cancellation on grounds other than the 24-hour booking window: business class, airline-cancelled flight, or travel insurance with covered reason (health/weather)."/>
-
-        <!--
-          True iff the booking was made within the last 24 hours.
-          Rule: cancel-within-24h
-          Policy: "The booking was made within the last 24 hrs" is a cancellation ground.
-          The validator cannot compute this from wall-clock time alone; the environment
-          must evaluate and set this flag before cancel_reservation fires.
-        -->
-        <event id="booking_within_24h"
-               dataType="bool" decision="?"
-               description="Provide whether the reservation was made within the last 24 hours. Policy: bookings made within 24 h are eligible for cancellation regardless of class or insurance."/>
-
-        <!--
-          Full cancellation eligibility (decision event).
-          True iff: base eligibility OR booking within 24 h.
-          Rule: cancel-not-eligible
-        -->
-        <event id="reservation_cancellation_eligible"
-               dataType="bool"
-               decision="[reservation_cancellation_eligible_base] or [booking_within_24h]"
-               description="Cancellation eligibility check failed: reservation must be business class, airline-cancelled, insured with covered reason, or booked within the last 24 hours."/>
-
-        <!-- Current total checked-bag count on the reservation -->
-        <event id="reservation_current_bag_count"
-               dataType="int" decision="?"
-               description="Provide the current total number of checked bags in the reservation."/>
-
-        <!--
-          Number of passengers on the reservation.
-          Shared by passenger_count_unchanged_valid and expected_certificate_amount.
-        -->
-        <event id="reservation_num_passengers"
-               dataType="int" decision="?"
-               description="Provide the number of passengers in the reservation."/>
-
-        <!-- =================================================================
-             MODIFICATION PAYMENT DATA EVENTS
-             ================================================================= -->
-
-        <!--
-          True iff the payment method provided for the flight modification is already in the
-          user profile. Cannot be verified from scalar arguments alone; environment must set.
-          Policy: "The payment method must already be in user profile for safety reasons."
-          Rule: update-payment-in-profile
-        -->
-        <event id="update_payment_in_profile"
-               dataType="bool" decision="?"
-               description="Provide whether the payment method supplied for the flight modification is in the user profile. Policy: payment method must already be in user profile for safety reasons."/>
-
-        <!-- =================================================================
-             BAGGAGE UPDATE DATA EVENTS
-             ================================================================= -->
-
-        <!-- Requested new total bag count -->
-        <event id="new_total_baggages"
-               dataType="int" decision="?"
-               description="Provide the requested new total number of checked bags."/>
-
-        <!--
-          True iff new total >= current (bags can only be added, not removed).
-          Rule: baggage-only-add
-        -->
-        <event id="bags_add_only_valid"
-               dataType="bool"
-               decision="[new_total_baggages] &gt;= [reservation_current_bag_count]"
-               description="Baggage update validation failed: new total bag count must be &gt;= current count. Bags can only be added, not removed."/>
-
-        <!-- =================================================================
-             PASSENGER UPDATE DATA EVENTS
-             ================================================================= -->
-
-        <!-- Number of passengers submitted in the update request -->
-        <event id="update_num_passengers"
-               dataType="int" decision="?"
-               description="Provide the number of passengers in the passenger-update request."/>
-
-        <!--
-          True iff submitted count equals current reservation count.
-          Rule: passenger-count-unchanged
-          Policy: "The user can modify passengers but cannot modify the number of passengers."
-        -->
-        <event id="passenger_count_unchanged_valid"
-               dataType="bool"
-               decision="[update_num_passengers] == [reservation_num_passengers]"
-               description="Passenger update validation failed: the number of passengers cannot be changed. Submitted count must equal current reservation count."/>
-
-        <!-- =================================================================
-             COMPENSATION - USER ELIGIBILITY
-             ================================================================= -->
-
-        <!--
-          True iff: silver/gold member OR travel insurance OR business class.
-          Regular members without insurance on (basic) economy are not eligible.
-          Rule: compensation-eligibility
-        -->
-        <event id="user_compensation_eligible"
-               dataType="bool" decision="?"
-               description="Provide whether the user is eligible for compensation (silver/gold member, travel insurance holder, or business-class passenger). Regular members without insurance flying economy/basic-economy are not eligible."/>
-
-        <!-- =================================================================
-             COMPENSATION - FLIGHT STATUS AND AMOUNT CALCULATION
-             ================================================================= -->
-
-        <!-- True iff the airline cancelled the flight -->
-        <event id="flight_is_cancelled"
-               dataType="bool" decision="?"
-               description="Provide whether the flight was cancelled by the airline."/>
-
-        <!-- True iff the flight is delayed -->
-        <event id="flight_is_delayed"
-               dataType="bool" decision="?"
-               description="Provide whether the flight is delayed."/>
-
-        <!--
-          Policy-mandated certificate amount (decision event):
-            cancelled flight -> $100 x num_passengers
-            delayed flight   -> $50  x num_passengers
-            otherwise        -> $0
-          Rule: certificate-amount-valid (amount component)
-        -->
-        <event id="expected_certificate_amount"
-               dataType="int"
-               decision="if [flight_is_cancelled] then [reservation_num_passengers] * 100 else if [flight_is_delayed] then [reservation_num_passengers] * 50 else 0"
-               description="Computes the policy-mandated certificate amount from flight status and passenger count."/>
-
-        <!-- =================================================================
-             CERTIFICATE AMOUNT VALIDATION
-             ================================================================= -->
-
-        <!-- Actual certificate amount the agent intends to issue -->
-        <event id="certificate_amount"
-               dataType="int" decision="?"
-               description="Provide the certificate amount to be issued."/>
-
-        <!--
-          True iff provided amount equals policy-mandated expected amount.
-          Rule: certificate-amount-valid
-        -->
-        <event id="certificate_amount_valid"
-               dataType="bool"
-               decision="[certificate_amount] == [expected_certificate_amount]"
-               description="Certificate amount validation failed: amount must equal $100 x passengers for cancelled flights or $50 x passengers for delayed flights."/>
-
+        <event id="get_user_details" description="User details could not be retrieved at this point." />
+        <event id="get_reservation_details" description="Reservation details cannot be looked up before user identity is established. Call get_user_details first." />
+        <event id="search_direct_flight" description="Direct flight search is not available at this point." />
+        <event id="search_onestop_flight" description="One-stop flights cannot be searched before direct flights have been searched. Call search_direct_flight first." />
+        <event id="get_flight_status" description="Flight status lookup is not available at this point." />
+        <event id="book_reservation" description="Reservation cannot be booked. Ensure: (1) get_user_details called, (2) booking_params_valid confirms &lt;=5 passengers, &lt;=1 credit card, &lt;=3 gift cards, &lt;=1 certificate, (3) booking_payment_methods_valid confirms payment methods are in user profile. Also unavailable after transfer to human agent." />
+        <event id="update_reservation_flights" description="Flight/cabin update is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) reservation_is_basic_economy is false (for flight changes), (4) update_payment_in_profile confirms payment method is in user profile. Also unavailable after transfer to human agent." />
+        <event id="update_reservation_baggages" description="Baggage update is blocked. Ensure: (1) get_user_details and get_reservation_details called, (2) bags_add_only_valid confirms new total &gt;= current. Also unavailable after transfer to human agent." />
+        <event id="update_reservation_passengers" description="Passenger update is blocked. Ensure: (1) get_user_details and get_reservation_details called, (2) passenger_count_unchanged_valid confirms the passenger count has not changed. Also unavailable after transfer to human agent." />
+        <event id="cancel_reservation" description="Cancellation is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) reservation_cancellation_eligible confirms eligibility (business class, airline-cancelled, insured, or booking within 24 h). Also unavailable after transfer to human agent." />
+        <event id="send_certificate" description="Certificate cannot be issued. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) user_compensation_eligible is true, (3) certificate_amount_valid confirms amount equals $100 x pax (cancelled) or $50 x pax (delayed). Also unavailable after transfer to human agent." />
+        <event id="transfer_to_human_agents" description="Transfer to a human agent is not available at this point." />
+        <event id="calculate" description="The calculate action is not available at this point." />
+        <event id="list_all_airports" description="The list all airports action is not available at this point." />
+        <event id="booking_num_passengers" dataType="int" decision="?" description="Provide the number of passengers in the booking request (policy limit: &lt;= 5)." />
+        <event id="booking_num_credit_cards" dataType="int" decision="?" description="Provide the number of credit cards in the booking payment methods (policy limit: &lt;= 1)." />
+        <event id="booking_num_gift_cards" dataType="int" decision="?" description="Provide the number of gift cards in the booking payment methods (policy limit: &lt;= 3)." />
+        <event id="booking_num_certificates" dataType="int" decision="?" description="Provide the number of travel certificates in the booking payment methods (policy limit: &lt;= 1)." />
+        <event id="booking_params_valid" dataType="bool" decision="[booking_num_passengers] &lt;= 5 and [booking_num_credit_cards] &lt;= 1 and [booking_num_gift_cards] &lt;= 3 and [booking_num_certificates] &lt;= 1" description="Booking parameter validation failed: check passengers &lt;= 5, credit cards &lt;= 1, gift cards &lt;= 3, travel certificates &lt;= 1." />
+        <event id="booking_payment_methods_valid" dataType="bool" decision="?" description="Provide whether all payment methods in the booking are in the user profile. Policy: all payment methods must already be in user profile for safety reasons." />
+        <event id="reservation_is_basic_economy" dataType="bool" decision="?" description="Provide whether the reservation cabin class is basic economy." />
+        <event id="reservation_has_flown" dataType="bool" decision="?" description="Provide whether any flight in the reservation has already departed/flown." />
+        <event id="reservation_cancellation_eligible_base" dataType="bool" decision="?" description="Provide whether the reservation is eligible for cancellation on grounds other than the 24-hour booking window: business class, airline-cancelled flight, or travel insurance with covered reason (health/weather)." />
+        <event id="booking_within_24h" dataType="bool" decision="?" description="Provide whether the reservation was made within the last 24 hours. Policy: bookings made within 24 h are eligible for cancellation regardless of class or insurance." />
+        <event id="reservation_cancellation_eligible" dataType="bool" decision="[reservation_cancellation_eligible_base] or [booking_within_24h]" description="Cancellation eligibility check failed: reservation must be business class, airline-cancelled, insured with covered reason, or booked within the last 24 hours." />
+        <event id="reservation_current_bag_count" dataType="int" decision="?" description="Provide the current total number of checked bags in the reservation." />
+        <event id="reservation_num_passengers" dataType="int" decision="?" description="Provide the number of passengers in the reservation." />
+        <event id="update_payment_in_profile" dataType="bool" decision="?" description="Provide whether the payment method supplied for the flight modification is in the user profile. Policy: payment method must already be in user profile for safety reasons." />
+        <event id="new_total_baggages" dataType="int" decision="?" description="Provide the requested new total number of checked bags." />
+        <event id="bags_add_only_valid" dataType="bool" decision="[new_total_baggages] &gt;= [reservation_current_bag_count]" description="Baggage update validation failed: new total bag count must be &gt;= current count. Bags can only be added, not removed." />
+        <event id="update_num_passengers" dataType="int" decision="?" description="Provide the number of passengers in the passenger-update request." />
+        <event id="passenger_count_unchanged_valid" dataType="bool" decision="[update_num_passengers] == [reservation_num_passengers]" description="Passenger update validation failed: the number of passengers cannot be changed. Submitted count must equal current reservation count." />
+        <event id="user_compensation_eligible" dataType="bool" decision="?" description="Provide whether the user is eligible for compensation (silver/gold member, travel insurance holder, or business-class passenger). Regular members without insurance flying economy/basic-economy are not eligible." />
+        <event id="flight_is_cancelled" dataType="bool" decision="?" description="Provide whether the flight was cancelled by the airline." />
+        <event id="flight_is_delayed" dataType="bool" decision="?" description="Provide whether the flight is delayed." />
+        <event id="expected_certificate_amount" dataType="int" decision="if [flight_is_cancelled] then [reservation_num_passengers] * 100 else if [flight_is_delayed] then [reservation_num_passengers] * 50 else 0" description="Computes the policy-mandated certificate amount from flight status and passenger count." />
+        <event id="certificate_amount" dataType="int" decision="?" description="Provide the certificate amount to be issued." />
+        <event id="certificate_amount_valid" dataType="bool" decision="[certificate_amount] == [expected_certificate_amount]" description="Certificate amount validation failed: amount must equal $100 x passengers for cancelled flights or $50 x passengers for delayed flights." />
       </events>
-
       <labels>
-        <label id="get_user_details"/>
-        <label id="get_reservation_details"/>
-        <label id="search_direct_flight"/>
-        <label id="search_onestop_flight"/>
-        <label id="get_flight_status"/>
-        <label id="book_reservation"/>
-        <label id="update_reservation_flights"/>
-        <label id="update_reservation_baggages"/>
-        <label id="update_reservation_passengers"/>
-        <label id="cancel_reservation"/>
-        <label id="send_certificate"/>
-        <label id="transfer_to_human_agents"/>
-        <label id="calculate"/>
-        <label id="list_all_airports"/>
-        <label id="booking_num_passengers"/>
-        <label id="booking_num_credit_cards"/>
-        <label id="booking_num_gift_cards"/>
-        <label id="booking_num_certificates"/>
-        <label id="booking_params_valid"/>
-        <label id="booking_payment_methods_valid"/>
-        <label id="reservation_is_basic_economy"/>
-        <label id="reservation_has_flown"/>
-        <label id="reservation_cancellation_eligible_base"/>
-        <label id="booking_within_24h"/>
-        <label id="reservation_cancellation_eligible"/>
-        <label id="reservation_current_bag_count"/>
-        <label id="reservation_num_passengers"/>
-        <label id="update_payment_in_profile"/>
-        <label id="new_total_baggages"/>
-        <label id="bags_add_only_valid"/>
-        <label id="update_num_passengers"/>
-        <label id="passenger_count_unchanged_valid"/>
-        <label id="user_compensation_eligible"/>
-        <label id="flight_is_cancelled"/>
-        <label id="flight_is_delayed"/>
-        <label id="expected_certificate_amount"/>
-        <label id="certificate_amount"/>
-        <label id="certificate_amount_valid"/>
+        <label id="get_user_details" />
+        <label id="get_reservation_details" />
+        <label id="search_direct_flight" />
+        <label id="search_onestop_flight" />
+        <label id="get_flight_status" />
+        <label id="book_reservation" />
+        <label id="update_reservation_flights" />
+        <label id="update_reservation_baggages" />
+        <label id="update_reservation_passengers" />
+        <label id="cancel_reservation" />
+        <label id="send_certificate" />
+        <label id="transfer_to_human_agents" />
+        <label id="calculate" />
+        <label id="list_all_airports" />
+        <label id="booking_num_passengers" />
+        <label id="booking_num_credit_cards" />
+        <label id="booking_num_gift_cards" />
+        <label id="booking_num_certificates" />
+        <label id="booking_params_valid" />
+        <label id="booking_payment_methods_valid" />
+        <label id="reservation_is_basic_economy" />
+        <label id="reservation_has_flown" />
+        <label id="reservation_cancellation_eligible_base" />
+        <label id="booking_within_24h" />
+        <label id="reservation_cancellation_eligible" />
+        <label id="reservation_current_bag_count" />
+        <label id="reservation_num_passengers" />
+        <label id="update_payment_in_profile" />
+        <label id="new_total_baggages" />
+        <label id="bags_add_only_valid" />
+        <label id="update_num_passengers" />
+        <label id="passenger_count_unchanged_valid" />
+        <label id="user_compensation_eligible" />
+        <label id="flight_is_cancelled" />
+        <label id="flight_is_delayed" />
+        <label id="expected_certificate_amount" />
+        <label id="certificate_amount" />
+        <label id="certificate_amount_valid" />
       </labels>
-
       <labelMappings>
-        <labelMapping eventId="get_user_details"                      labelId="get_user_details"/>
-        <labelMapping eventId="get_reservation_details"               labelId="get_reservation_details"/>
-        <labelMapping eventId="search_direct_flight"                  labelId="search_direct_flight"/>
-        <labelMapping eventId="search_onestop_flight"                 labelId="search_onestop_flight"/>
-        <labelMapping eventId="get_flight_status"                     labelId="get_flight_status"/>
-        <labelMapping eventId="book_reservation"                      labelId="book_reservation"/>
-        <labelMapping eventId="update_reservation_flights"            labelId="update_reservation_flights"/>
-        <labelMapping eventId="update_reservation_baggages"           labelId="update_reservation_baggages"/>
-        <labelMapping eventId="update_reservation_passengers"         labelId="update_reservation_passengers"/>
-        <labelMapping eventId="cancel_reservation"                    labelId="cancel_reservation"/>
-        <labelMapping eventId="send_certificate"                      labelId="send_certificate"/>
-        <labelMapping eventId="transfer_to_human_agents"              labelId="transfer_to_human_agents"/>
-        <labelMapping eventId="calculate"                             labelId="calculate"/>
-        <labelMapping eventId="list_all_airports"                     labelId="list_all_airports"/>
-        <labelMapping eventId="booking_num_passengers"                labelId="booking_num_passengers"/>
-        <labelMapping eventId="booking_num_credit_cards"              labelId="booking_num_credit_cards"/>
-        <labelMapping eventId="booking_num_gift_cards"                labelId="booking_num_gift_cards"/>
-        <labelMapping eventId="booking_num_certificates"              labelId="booking_num_certificates"/>
-        <labelMapping eventId="booking_params_valid"                  labelId="booking_params_valid"/>
-        <labelMapping eventId="booking_payment_methods_valid"         labelId="booking_payment_methods_valid"/>
-        <labelMapping eventId="reservation_is_basic_economy"          labelId="reservation_is_basic_economy"/>
-        <labelMapping eventId="reservation_has_flown"                 labelId="reservation_has_flown"/>
-        <labelMapping eventId="reservation_cancellation_eligible_base" labelId="reservation_cancellation_eligible_base"/>
-        <labelMapping eventId="booking_within_24h"                    labelId="booking_within_24h"/>
-        <labelMapping eventId="reservation_cancellation_eligible"     labelId="reservation_cancellation_eligible"/>
-        <labelMapping eventId="reservation_current_bag_count"         labelId="reservation_current_bag_count"/>
-        <labelMapping eventId="reservation_num_passengers"            labelId="reservation_num_passengers"/>
-        <labelMapping eventId="update_payment_in_profile"             labelId="update_payment_in_profile"/>
-        <labelMapping eventId="new_total_baggages"                    labelId="new_total_baggages"/>
-        <labelMapping eventId="bags_add_only_valid"                   labelId="bags_add_only_valid"/>
-        <labelMapping eventId="update_num_passengers"                 labelId="update_num_passengers"/>
-        <labelMapping eventId="passenger_count_unchanged_valid"       labelId="passenger_count_unchanged_valid"/>
-        <labelMapping eventId="user_compensation_eligible"            labelId="user_compensation_eligible"/>
-        <labelMapping eventId="flight_is_cancelled"                   labelId="flight_is_cancelled"/>
-        <labelMapping eventId="flight_is_delayed"                     labelId="flight_is_delayed"/>
-        <labelMapping eventId="expected_certificate_amount"           labelId="expected_certificate_amount"/>
-        <labelMapping eventId="certificate_amount"                    labelId="certificate_amount"/>
-        <labelMapping eventId="certificate_amount_valid"              labelId="certificate_amount_valid"/>
+        <labelMapping eventId="get_user_details" labelId="get_user_details" />
+        <labelMapping eventId="get_reservation_details" labelId="get_reservation_details" />
+        <labelMapping eventId="search_direct_flight" labelId="search_direct_flight" />
+        <labelMapping eventId="search_onestop_flight" labelId="search_onestop_flight" />
+        <labelMapping eventId="get_flight_status" labelId="get_flight_status" />
+        <labelMapping eventId="book_reservation" labelId="book_reservation" />
+        <labelMapping eventId="update_reservation_flights" labelId="update_reservation_flights" />
+        <labelMapping eventId="update_reservation_baggages" labelId="update_reservation_baggages" />
+        <labelMapping eventId="update_reservation_passengers" labelId="update_reservation_passengers" />
+        <labelMapping eventId="cancel_reservation" labelId="cancel_reservation" />
+        <labelMapping eventId="send_certificate" labelId="send_certificate" />
+        <labelMapping eventId="transfer_to_human_agents" labelId="transfer_to_human_agents" />
+        <labelMapping eventId="calculate" labelId="calculate" />
+        <labelMapping eventId="list_all_airports" labelId="list_all_airports" />
+        <labelMapping eventId="booking_num_passengers" labelId="booking_num_passengers" />
+        <labelMapping eventId="booking_num_credit_cards" labelId="booking_num_credit_cards" />
+        <labelMapping eventId="booking_num_gift_cards" labelId="booking_num_gift_cards" />
+        <labelMapping eventId="booking_num_certificates" labelId="booking_num_certificates" />
+        <labelMapping eventId="booking_params_valid" labelId="booking_params_valid" />
+        <labelMapping eventId="booking_payment_methods_valid" labelId="booking_payment_methods_valid" />
+        <labelMapping eventId="reservation_is_basic_economy" labelId="reservation_is_basic_economy" />
+        <labelMapping eventId="reservation_has_flown" labelId="reservation_has_flown" />
+        <labelMapping eventId="reservation_cancellation_eligible_base" labelId="reservation_cancellation_eligible_base" />
+        <labelMapping eventId="booking_within_24h" labelId="booking_within_24h" />
+        <labelMapping eventId="reservation_cancellation_eligible" labelId="reservation_cancellation_eligible" />
+        <labelMapping eventId="reservation_current_bag_count" labelId="reservation_current_bag_count" />
+        <labelMapping eventId="reservation_num_passengers" labelId="reservation_num_passengers" />
+        <labelMapping eventId="update_payment_in_profile" labelId="update_payment_in_profile" />
+        <labelMapping eventId="new_total_baggages" labelId="new_total_baggages" />
+        <labelMapping eventId="bags_add_only_valid" labelId="bags_add_only_valid" />
+        <labelMapping eventId="update_num_passengers" labelId="update_num_passengers" />
+        <labelMapping eventId="passenger_count_unchanged_valid" labelId="passenger_count_unchanged_valid" />
+        <labelMapping eventId="user_compensation_eligible" labelId="user_compensation_eligible" />
+        <labelMapping eventId="flight_is_cancelled" labelId="flight_is_cancelled" />
+        <labelMapping eventId="flight_is_delayed" labelId="flight_is_delayed" />
+        <labelMapping eventId="expected_certificate_amount" labelId="expected_certificate_amount" />
+        <labelMapping eventId="certificate_amount" labelId="certificate_amount" />
+        <labelMapping eventId="certificate_amount_valid" labelId="certificate_amount_valid" />
       </labelMappings>
-
     </resources>
-
     <constraints>
-
-      <!--
-           UNGUARDED CONDITIONS  (A must have been executed before B can fire)
-            -->
-
       <conditions>
-
-        <!-- Structural sequencing (inherited from dcr1.xml) -->
-        <condition sourceId="get_user_details" targetId="book_reservation"/>
-        <condition sourceId="get_user_details" targetId="get_reservation_details"/>
-        <condition sourceId="get_user_details" targetId="update_reservation_flights"/>
-        <condition sourceId="get_user_details" targetId="update_reservation_baggages"/>
-        <condition sourceId="get_user_details" targetId="update_reservation_passengers"/>
-        <condition sourceId="get_user_details" targetId="cancel_reservation"/>
-        <condition sourceId="get_user_details" targetId="send_certificate"/>
-        <condition sourceId="get_reservation_details" targetId="update_reservation_flights"/>
-        <condition sourceId="get_reservation_details" targetId="update_reservation_baggages"/>
-        <condition sourceId="get_reservation_details" targetId="update_reservation_passengers"/>
-        <condition sourceId="get_reservation_details" targetId="cancel_reservation"/>
-        <condition sourceId="get_flight_status"        targetId="send_certificate"/>
-        <condition sourceId="search_direct_flight"     targetId="search_onestop_flight"/>
-
-        <!-- Additional structural conditions (also added to dcr1.xml):
-             The agent must call get_flight_status before any flight modification or cancellation
-             to determine whether any segment has already been flown. -->
-        <condition sourceId="get_flight_status" targetId="update_reservation_flights"/>
-        <condition sourceId="get_flight_status" targetId="cancel_reservation"/>
-
-        <!-- Reservation details are needed before compensation to establish
-             passenger count (for amount) and to verify membership/insurance eligibility. -->
-        <condition sourceId="get_reservation_details" targetId="send_certificate"/>
-
-        <!-- Booking parameter data flow:
-             all four counts -> booking_params_valid -> book_reservation -->
-        <condition sourceId="booking_num_passengers"   targetId="booking_params_valid"/>
-        <condition sourceId="booking_num_credit_cards" targetId="booking_params_valid"/>
-        <condition sourceId="booking_num_gift_cards"   targetId="booking_params_valid"/>
-        <condition sourceId="booking_num_certificates" targetId="booking_params_valid"/>
-        <condition sourceId="booking_params_valid"     targetId="book_reservation"/>
-
-        <!-- Payment methods profile check for booking -->
-        <condition sourceId="booking_payment_methods_valid" targetId="book_reservation"/>
-
-        <!-- Reservation fact data flow -->
-        <condition sourceId="reservation_has_flown"             targetId="update_reservation_flights"/>
-        <condition sourceId="reservation_has_flown"             targetId="cancel_reservation"/>
-        <condition sourceId="reservation_is_basic_economy"      targetId="update_reservation_flights"/>
-
-        <!-- Cancellation eligibility data flow:
-             base eligibility + 24h flag -> computed full eligibility -> cancel_reservation -->
-        <condition sourceId="reservation_cancellation_eligible_base" targetId="reservation_cancellation_eligible"/>
-        <condition sourceId="booking_within_24h"                     targetId="reservation_cancellation_eligible"/>
-        <condition sourceId="reservation_cancellation_eligible"      targetId="cancel_reservation"/>
-
-        <!-- Modification payment profile check -->
-        <condition sourceId="update_payment_in_profile" targetId="update_reservation_flights"/>
-
-        <!-- Baggage update data flow:
-             current_count + new_count -> bags_add_only_valid -> update -->
-        <condition sourceId="reservation_current_bag_count" targetId="bags_add_only_valid"/>
-        <condition sourceId="new_total_baggages"            targetId="bags_add_only_valid"/>
-        <condition sourceId="bags_add_only_valid"           targetId="update_reservation_baggages"/>
-
-        <!-- Passenger update data flow:
-             current_count + new_count -> passenger_count_unchanged_valid -> update -->
-        <condition sourceId="reservation_num_passengers"      targetId="passenger_count_unchanged_valid"/>
-        <condition sourceId="update_num_passengers"           targetId="passenger_count_unchanged_valid"/>
-        <condition sourceId="passenger_count_unchanged_valid" targetId="update_reservation_passengers"/>
-
-        <!-- Compensation data flow:
-             eligibility -> send_certificate (direct gate)
-             flight_status + num_pax -> expected_amount -> amount_valid + certificate_amount -> send_certificate -->
-        <condition sourceId="user_compensation_eligible"  targetId="send_certificate"/>
-        <condition sourceId="flight_is_cancelled"         targetId="expected_certificate_amount"/>
-        <condition sourceId="flight_is_delayed"           targetId="expected_certificate_amount"/>
-        <condition sourceId="reservation_num_passengers"  targetId="expected_certificate_amount"/>
-        <condition sourceId="expected_certificate_amount" targetId="certificate_amount_valid"/>
-        <condition sourceId="certificate_amount"          targetId="certificate_amount_valid"/>
-        <condition sourceId="certificate_amount_valid"    targetId="send_certificate"/>
-
+        <condition sourceId="get_user_details" targetId="book_reservation" />
+        <condition sourceId="get_user_details" targetId="get_reservation_details" />
+        <condition sourceId="get_user_details" targetId="update_reservation_flights" />
+        <condition sourceId="get_user_details" targetId="update_reservation_baggages" />
+        <condition sourceId="get_user_details" targetId="update_reservation_passengers" />
+        <condition sourceId="get_user_details" targetId="cancel_reservation" />
+        <condition sourceId="get_user_details" targetId="send_certificate" />
+        <condition sourceId="get_reservation_details" targetId="update_reservation_flights" />
+        <condition sourceId="get_reservation_details" targetId="update_reservation_baggages" />
+        <condition sourceId="get_reservation_details" targetId="update_reservation_passengers" />
+        <condition sourceId="get_reservation_details" targetId="cancel_reservation" />
+        <condition sourceId="get_reservation_details" targetId="send_certificate" />
+        <condition sourceId="get_flight_status" targetId="update_reservation_flights" />
+        <condition sourceId="get_flight_status" targetId="cancel_reservation" />
+        <condition sourceId="get_flight_status" targetId="send_certificate" />
+        <condition sourceId="search_direct_flight" targetId="search_onestop_flight" />
+        <condition sourceId="booking_num_passengers" targetId="booking_params_valid" />
+        <condition sourceId="booking_num_credit_cards" targetId="booking_params_valid" />
+        <condition sourceId="booking_num_gift_cards" targetId="booking_params_valid" />
+        <condition sourceId="booking_num_certificates" targetId="booking_params_valid" />
+        <condition sourceId="booking_params_valid" targetId="book_reservation" />
+        <condition sourceId="booking_payment_methods_valid" targetId="book_reservation" />
+        <condition sourceId="reservation_has_flown" targetId="update_reservation_flights" />
+        <condition sourceId="reservation_has_flown" targetId="cancel_reservation" />
+        <condition sourceId="reservation_is_basic_economy" targetId="update_reservation_flights" />
+        <condition sourceId="reservation_cancellation_eligible_base" targetId="reservation_cancellation_eligible" />
+        <condition sourceId="booking_within_24h" targetId="reservation_cancellation_eligible" />
+        <condition sourceId="reservation_cancellation_eligible" targetId="cancel_reservation" />
+        <condition sourceId="update_payment_in_profile" targetId="update_reservation_flights" />
+        <condition sourceId="reservation_current_bag_count" targetId="bags_add_only_valid" />
+        <condition sourceId="new_total_baggages" targetId="bags_add_only_valid" />
+        <condition sourceId="bags_add_only_valid" targetId="update_reservation_baggages" />
+        <condition sourceId="reservation_num_passengers" targetId="passenger_count_unchanged_valid" />
+        <condition sourceId="reservation_num_passengers" targetId="expected_certificate_amount" />
+        <condition sourceId="update_num_passengers" targetId="passenger_count_unchanged_valid" />
+        <condition sourceId="passenger_count_unchanged_valid" targetId="update_reservation_passengers" />
+        <condition sourceId="user_compensation_eligible" targetId="send_certificate" />
+        <condition sourceId="flight_is_cancelled" targetId="expected_certificate_amount" />
+        <condition sourceId="flight_is_delayed" targetId="expected_certificate_amount" />
+        <condition sourceId="expected_certificate_amount" targetId="certificate_amount_valid" />
+        <condition sourceId="certificate_amount" targetId="certificate_amount_valid" />
+        <condition sourceId="certificate_amount_valid" targetId="send_certificate" />
       </conditions>
-
-      <responses/>
-      <milestones/>
-      <coresponces/>
-
-      <!--
-           UNGUARDED EXCLUDES - Transfer to human agent is terminal.
-           Executing transfer_to_human_agents permanently disables all
-           write actions for the remainder of the session.
-            -->
-
+      <responses />
       <excludes>
-        <!-- rule: no-booking-after-transfer -->
-        <exclude sourceId="transfer_to_human_agents" targetId="book_reservation"/>
-        <!-- rule: no-flight-update-after-transfer -->
-        <exclude sourceId="transfer_to_human_agents" targetId="update_reservation_flights"/>
-        <!-- rule: no-baggage-update-after-transfer -->
-        <exclude sourceId="transfer_to_human_agents" targetId="update_reservation_baggages"/>
-        <!-- rule: no-passenger-update-after-transfer -->
-        <exclude sourceId="transfer_to_human_agents" targetId="update_reservation_passengers"/>
-        <!-- rule: no-cancellation-after-transfer -->
-        <exclude sourceId="transfer_to_human_agents" targetId="cancel_reservation"/>
-        <!-- rule: no-compensation-after-transfer -->
-        <exclude sourceId="transfer_to_human_agents" targetId="send_certificate"/>
+        <exclude sourceId="transfer_to_human_agents" targetId="book_reservation" />
+        <exclude sourceId="transfer_to_human_agents" targetId="update_reservation_flights" />
+        <exclude sourceId="transfer_to_human_agents" targetId="update_reservation_baggages" />
+        <exclude sourceId="transfer_to_human_agents" targetId="update_reservation_passengers" />
+        <exclude sourceId="transfer_to_human_agents" targetId="cancel_reservation" />
+        <exclude sourceId="transfer_to_human_agents" targetId="send_certificate" />
       </excludes>
-
-      <!-- Dynamic includes handled via guardedIncludes -->
-      <includes/>
-
-      <!--
-           GUARDED EXCLUDES - Data-aware blocking.
-           When a validation/fact event fires with a failing value,
-           the corresponding action event becomes excluded.
-           Guard syntax: bool event references are used directly as BExpE
-           (no "== true" needed; negation via (not [event])).
-            -->
-
-      <guardedExcludes>
-
-        <!--
-          Booking: exclude book_reservation if parameter constraints not satisfied.
-          Combines rules: book-max-five-passengers, book-too-many-credit-cards,
-                          book-too-many-gift-cards, book-too-many-certificates
-        -->
-        <exclude sourceId="booking_params_valid" targetId="book_reservation"
-                 guard="(not [booking_params_valid])"/>
-
-        <!--
-          Booking: exclude book_reservation if payment methods not in user profile.
-          Rule: book-payment-in-profile
-        -->
-        <exclude sourceId="booking_payment_methods_valid" targetId="book_reservation"
-                 guard="(not [booking_payment_methods_valid])"/>
-
-        <!--
-          Modification: exclude update_reservation_flights if any flight already flown.
-          Rule: cabin-change-no-flown-flights
-        -->
-        <exclude sourceId="reservation_has_flown" targetId="update_reservation_flights"
-                 guard="[reservation_has_flown]"/>
-
-        <!--
-          Modification: exclude update_reservation_flights if reservation is basic economy.
-          Rule: no-basic-economy-flight-modification
-          NOTE: conservative approximation - also blocks cabin-only changes for basic economy;
-          policy allows those.  Split update_reservation_flights into two events to fix.
-        -->
-        <exclude sourceId="reservation_is_basic_economy" targetId="update_reservation_flights"
-                 guard="[reservation_is_basic_economy]"/>
-
-        <!--
-          Modification: exclude update_reservation_flights if payment method not in profile.
-          Rule: update-payment-in-profile
-        -->
-        <exclude sourceId="update_payment_in_profile" targetId="update_reservation_flights"
-                 guard="(not [update_payment_in_profile])"/>
-
-        <!--
-          Cancellation: exclude cancel_reservation if any flight already flown.
-          Rule: cancel-no-flown-flights
-        -->
-        <exclude sourceId="reservation_has_flown" targetId="cancel_reservation"
-                 guard="[reservation_has_flown]"/>
-
-        <!--
-          Cancellation: exclude cancel_reservation if not eligible.
-          Rule: cancel-not-eligible
-        -->
-        <exclude sourceId="reservation_cancellation_eligible" targetId="cancel_reservation"
-                 guard="(not [reservation_cancellation_eligible])"/>
-
-        <!--
-          Baggage: exclude update_reservation_baggages if reducing bag count.
-          Rule: baggage-only-add
-        -->
-        <exclude sourceId="bags_add_only_valid" targetId="update_reservation_baggages"
-                 guard="(not [bags_add_only_valid])"/>
-
-        <!--
-          Passengers: exclude update_reservation_passengers if count changes.
-          Rule: passenger-count-unchanged
-        -->
-        <exclude sourceId="passenger_count_unchanged_valid" targetId="update_reservation_passengers"
-                 guard="(not [passenger_count_unchanged_valid])"/>
-
-        <!--
-          Compensation: exclude send_certificate if user not eligible.
-          Rule: compensation-eligibility
-        -->
-        <exclude sourceId="user_compensation_eligible" targetId="send_certificate"
-                 guard="(not [user_compensation_eligible])"/>
-
-        <!--
-          Compensation: exclude send_certificate if amount does not match policy.
-          Rule: certificate-amount-valid
-        -->
-        <exclude sourceId="certificate_amount_valid" targetId="send_certificate"
-                 guard="(not [certificate_amount_valid])"/>
-
-      </guardedExcludes>
-
-      <!--
-           GUARDED INCLUDES - Re-enabling after successful re-checks.
-           When a validation/fact event fires with a passing value,
-           the corresponding action event is (re-)included.
-            -->
-
+      <includes />
+      <milestones />
+      <coresponces />
+      <guardedConditions />
+      <guardedResponses />
       <guardedIncludes>
-
-        <!-- Booking: re-include when all parameter constraints pass -->
-        <include sourceId="booking_params_valid" targetId="book_reservation"
-                 guard="[booking_params_valid]"/>
-
-        <!-- Booking: re-include when payment methods are in user profile -->
-        <include sourceId="booking_payment_methods_valid" targetId="book_reservation"
-                 guard="[booking_payment_methods_valid]"/>
-
-        <!-- Modification: re-include when no flights have been flown -->
-        <include sourceId="reservation_has_flown" targetId="update_reservation_flights"
-                 guard="(not [reservation_has_flown])"/>
-
-        <!-- Modification: re-include when reservation is not basic economy -->
-        <include sourceId="reservation_is_basic_economy" targetId="update_reservation_flights"
-                 guard="(not [reservation_is_basic_economy])"/>
-
-        <!-- Modification: re-include when payment method is in user profile -->
-        <include sourceId="update_payment_in_profile" targetId="update_reservation_flights"
-                 guard="[update_payment_in_profile]"/>
-
-        <!-- Cancellation: re-include when no flights have been flown -->
-        <include sourceId="reservation_has_flown" targetId="cancel_reservation"
-                 guard="(not [reservation_has_flown])"/>
-
-        <!-- Cancellation: re-include when cancellation-eligible -->
-        <include sourceId="reservation_cancellation_eligible" targetId="cancel_reservation"
-                 guard="[reservation_cancellation_eligible]"/>
-
-        <!-- Baggage: re-include when new bag count is valid -->
-        <include sourceId="bags_add_only_valid" targetId="update_reservation_baggages"
-                 guard="[bags_add_only_valid]"/>
-
-        <!-- Passengers: re-include when passenger count is unchanged -->
-        <include sourceId="passenger_count_unchanged_valid" targetId="update_reservation_passengers"
-                 guard="[passenger_count_unchanged_valid]"/>
-
-        <!-- Compensation: re-include when user is eligible -->
-        <include sourceId="user_compensation_eligible" targetId="send_certificate"
-                 guard="[user_compensation_eligible]"/>
-
-        <!-- Compensation: re-include when certificate amount is correct -->
-        <include sourceId="certificate_amount_valid" targetId="send_certificate"
-                 guard="[certificate_amount_valid]"/>
-
+        <include sourceId="booking_params_valid" targetId="book_reservation" guard="[booking_params_valid]" />
+        <include sourceId="booking_payment_methods_valid" targetId="book_reservation" guard="[booking_payment_methods_valid]" />
+        <include sourceId="reservation_has_flown" targetId="update_reservation_flights" guard="(not [reservation_has_flown])" />
+        <include sourceId="reservation_is_basic_economy" targetId="update_reservation_flights" guard="(not [reservation_is_basic_economy])" />
+        <include sourceId="update_payment_in_profile" targetId="update_reservation_flights" guard="[update_payment_in_profile]" />
+        <include sourceId="reservation_has_flown" targetId="cancel_reservation" guard="(not [reservation_has_flown])" />
+        <include sourceId="reservation_cancellation_eligible" targetId="cancel_reservation" guard="[reservation_cancellation_eligible]" />
+        <include sourceId="bags_add_only_valid" targetId="update_reservation_baggages" guard="[bags_add_only_valid]" />
+        <include sourceId="passenger_count_unchanged_valid" targetId="update_reservation_passengers" guard="[passenger_count_unchanged_valid]" />
+        <include sourceId="user_compensation_eligible" targetId="send_certificate" guard="[user_compensation_eligible]" />
+        <include sourceId="certificate_amount_valid" targetId="send_certificate" guard="[certificate_amount_valid]" />
       </guardedIncludes>
-
-      <guardedConditions/>
-      <guardedResponses/>
-      <guardedMilestones/>
-      <guardedNoResponses/>
-
+      <guardedExcludes>
+        <exclude sourceId="booking_params_valid" targetId="book_reservation" guard="(not [booking_params_valid])" />
+        <exclude sourceId="booking_payment_methods_valid" targetId="book_reservation" guard="(not [booking_payment_methods_valid])" />
+        <exclude sourceId="reservation_has_flown" targetId="update_reservation_flights" guard="[reservation_has_flown]" />
+        <exclude sourceId="reservation_is_basic_economy" targetId="update_reservation_flights" guard="[reservation_is_basic_economy]" />
+        <exclude sourceId="update_payment_in_profile" targetId="update_reservation_flights" guard="(not [update_payment_in_profile])" />
+        <exclude sourceId="reservation_has_flown" targetId="cancel_reservation" guard="[reservation_has_flown]" />
+        <exclude sourceId="reservation_cancellation_eligible" targetId="cancel_reservation" guard="(not [reservation_cancellation_eligible])" />
+        <exclude sourceId="bags_add_only_valid" targetId="update_reservation_baggages" guard="(not [bags_add_only_valid])" />
+        <exclude sourceId="passenger_count_unchanged_valid" targetId="update_reservation_passengers" guard="(not [passenger_count_unchanged_valid])" />
+        <exclude sourceId="user_compensation_eligible" targetId="send_certificate" guard="(not [user_compensation_eligible])" />
+        <exclude sourceId="certificate_amount_valid" targetId="send_certificate" guard="(not [certificate_amount_valid])" />
+      </guardedExcludes>
+      <guardedMilestones />
+      <guardedNoResponses />
     </constraints>
   </specification>
-
   <runtime>
     <marking>
-      <!-- No events executed at session start -->
-      <executed/>
-
-      <!-- All 39 events start included.
-           Guarded excludes narrow availability as data events are executed
-           and fact-check decisions are computed. -->
+      <executed />
       <included>
-        <!-- Structural -->
-        <event id="get_user_details"/>
-        <event id="get_reservation_details"/>
-        <event id="search_direct_flight"/>
-        <event id="search_onestop_flight"/>
-        <event id="get_flight_status"/>
-        <event id="book_reservation"/>
-        <event id="update_reservation_flights"/>
-        <event id="update_reservation_baggages"/>
-        <event id="update_reservation_passengers"/>
-        <event id="cancel_reservation"/>
-        <event id="send_certificate"/>
-        <event id="transfer_to_human_agents"/>
-        <event id="calculate"/>
-        <event id="list_all_airports"/>
-        <!-- Booking data -->
-        <event id="booking_num_passengers"/>
-        <event id="booking_num_credit_cards"/>
-        <event id="booking_num_gift_cards"/>
-        <event id="booking_num_certificates"/>
-        <event id="booking_params_valid"/>
-        <event id="booking_payment_methods_valid"/>
-        <!-- Reservation fact data -->
-        <event id="reservation_is_basic_economy"/>
-        <event id="reservation_has_flown"/>
-        <event id="reservation_cancellation_eligible_base"/>
-        <event id="booking_within_24h"/>
-        <event id="reservation_cancellation_eligible"/>
-        <event id="reservation_current_bag_count"/>
-        <event id="reservation_num_passengers"/>
-        <!-- Modification payment data -->
-        <event id="update_payment_in_profile"/>
-        <!-- Baggage update data -->
-        <event id="new_total_baggages"/>
-        <event id="bags_add_only_valid"/>
-        <!-- Passenger update data -->
-        <event id="update_num_passengers"/>
-        <event id="passenger_count_unchanged_valid"/>
-        <!-- User data -->
-        <event id="user_compensation_eligible"/>
-        <!-- Flight status data -->
-        <event id="flight_is_cancelled"/>
-        <event id="flight_is_delayed"/>
-        <event id="expected_certificate_amount"/>
-        <!-- Certificate data -->
-        <event id="certificate_amount"/>
-        <event id="certificate_amount_valid"/>
+        <event id="get_user_details" />
+        <event id="get_reservation_details" />
+        <event id="search_direct_flight" />
+        <event id="search_onestop_flight" />
+        <event id="get_flight_status" />
+        <event id="book_reservation" />
+        <event id="update_reservation_flights" />
+        <event id="update_reservation_baggages" />
+        <event id="update_reservation_passengers" />
+        <event id="cancel_reservation" />
+        <event id="send_certificate" />
+        <event id="transfer_to_human_agents" />
+        <event id="calculate" />
+        <event id="list_all_airports" />
+        <event id="booking_num_passengers" />
+        <event id="booking_num_credit_cards" />
+        <event id="booking_num_gift_cards" />
+        <event id="booking_num_certificates" />
+        <event id="booking_params_valid" />
+        <event id="booking_payment_methods_valid" />
+        <event id="reservation_is_basic_economy" />
+        <event id="reservation_has_flown" />
+        <event id="reservation_cancellation_eligible_base" />
+        <event id="booking_within_24h" />
+        <event id="reservation_cancellation_eligible" />
+        <event id="reservation_current_bag_count" />
+        <event id="reservation_num_passengers" />
+        <event id="update_payment_in_profile" />
+        <event id="new_total_baggages" />
+        <event id="bags_add_only_valid" />
+        <event id="update_num_passengers" />
+        <event id="passenger_count_unchanged_valid" />
+        <event id="user_compensation_eligible" />
+        <event id="flight_is_cancelled" />
+        <event id="flight_is_delayed" />
+        <event id="expected_certificate_amount" />
+        <event id="certificate_amount" />
+        <event id="certificate_amount_valid" />
       </included>
-
-      <!-- No pending response obligations at session start -->
-      <pendingResponses/>
+      <pendingResponses />
     </marking>
   </runtime>
-
 </dcrgraph>

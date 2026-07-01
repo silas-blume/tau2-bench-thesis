@@ -1,0 +1,277 @@
+title: "Airline Agent Policy — Data-Aware (XML_DCR_DATA)"
+# Source file for dcr2.xml.  Compile with:
+#   python scripts/compile_dcr_yaml.py data/tau2/domains/airline/security/dcr2.yaml
+
+# ── events ────────────────────────────────────────────────────────────────────
+# Void events: value is the blocked-message shown at runtime.
+# Input data events: type present, no expr → decision="?"
+# Computed events:   type + expr            → decision=<expr>
+# Expressions use plain < > (compiler handles XML escaping).
+
+events:
+  # Structural (void) events
+  get_user_details: "User details could not be retrieved at this point."
+  get_reservation_details: "Reservation details cannot be looked up before user identity is established. Call get_user_details first."
+  search_direct_flight: "Direct flight search is not available at this point."
+  search_onestop_flight: "One-stop flights cannot be searched before direct flights have been searched. Call search_direct_flight first."
+  get_flight_status: "Flight status lookup is not available at this point."
+  book_reservation: "Reservation cannot be booked. Ensure: (1) get_user_details called, (2) booking_params_valid confirms <=5 passengers, <=1 credit card, <=3 gift cards, <=1 certificate, (3) booking_payment_methods_valid confirms payment methods are in user profile. Also unavailable after transfer to human agent."
+  update_reservation_flights: "Flight/cabin update is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) reservation_is_basic_economy is false (for flight changes), (4) update_payment_in_profile confirms payment method is in user profile. Also unavailable after transfer to human agent."
+  update_reservation_baggages: "Baggage update is blocked. Ensure: (1) get_user_details and get_reservation_details called, (2) bags_add_only_valid confirms new total >= current. Also unavailable after transfer to human agent."
+  update_reservation_passengers: "Passenger update is blocked. Ensure: (1) get_user_details and get_reservation_details called, (2) passenger_count_unchanged_valid confirms the passenger count has not changed. Also unavailable after transfer to human agent."
+  cancel_reservation: "Cancellation is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) reservation_cancellation_eligible confirms eligibility (business class, airline-cancelled, insured, or booking within 24 h). Also unavailable after transfer to human agent."
+  send_certificate: "Certificate cannot be issued. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) user_compensation_eligible is true, (3) certificate_amount_valid confirms amount equals $100 x pax (cancelled) or $50 x pax (delayed). Also unavailable after transfer to human agent."
+  transfer_to_human_agents: "Transfer to a human agent is not available at this point."
+  calculate: "The calculate action is not available at this point."
+  list_all_airports: "The list all airports action is not available at this point."
+
+  # ── booking parameter data events ─────────────────────────────────────────
+  booking_num_passengers:
+    type: int
+    description: "Provide the number of passengers in the booking request (policy limit: <= 5)."
+  booking_num_credit_cards:
+    type: int
+    description: "Provide the number of credit cards in the booking payment methods (policy limit: <= 1)."
+  booking_num_gift_cards:
+    type: int
+    description: "Provide the number of gift cards in the booking payment methods (policy limit: <= 3)."
+  booking_num_certificates:
+    type: int
+    description: "Provide the number of travel certificates in the booking payment methods (policy limit: <= 1)."
+  # Combined validity: all four counts within limits
+  booking_params_valid:
+    type: bool
+    expr: "[booking_num_passengers] <= 5 and [booking_num_credit_cards] <= 1 and [booking_num_gift_cards] <= 3 and [booking_num_certificates] <= 1"
+    description: "Booking parameter validation failed: check passengers <= 5, credit cards <= 1, gift cards <= 3, travel certificates <= 1."
+  # Payment methods profile check (cross-entity lookup; environment must set)
+  booking_payment_methods_valid:
+    type: bool
+    description: "Provide whether all payment methods in the booking are in the user profile. Policy: all payment methods must already be in user profile for safety reasons."
+
+  # ── reservation fact data events ──────────────────────────────────────────
+  reservation_is_basic_economy:
+    type: bool
+    description: "Provide whether the reservation cabin class is basic economy."
+  reservation_has_flown:
+    type: bool
+    description: "Provide whether any flight in the reservation has already departed/flown."
+  # Cancellation eligibility without the 24-hour window
+  reservation_cancellation_eligible_base:
+    type: bool
+    description: "Provide whether the reservation is eligible for cancellation on grounds other than the 24-hour booking window: business class, airline-cancelled flight, or travel insurance with covered reason (health/weather)."
+  # 24-hour window (environment must evaluate wall-clock comparison)
+  booking_within_24h:
+    type: bool
+    description: "Provide whether the reservation was made within the last 24 hours. Policy: bookings made within 24 h are eligible for cancellation regardless of class or insurance."
+  # Full eligibility = base OR 24h
+  reservation_cancellation_eligible:
+    type: bool
+    expr: "[reservation_cancellation_eligible_base] or [booking_within_24h]"
+    description: "Cancellation eligibility check failed: reservation must be business class, airline-cancelled, insured with covered reason, or booked within the last 24 hours."
+  reservation_current_bag_count:
+    type: int
+    description: "Provide the current total number of checked bags in the reservation."
+  reservation_num_passengers:
+    type: int
+    description: "Provide the number of passengers in the reservation."
+
+  # ── modification payment data event ───────────────────────────────────────
+  update_payment_in_profile:
+    type: bool
+    description: "Provide whether the payment method supplied for the flight modification is in the user profile. Policy: payment method must already be in user profile for safety reasons."
+
+  # ── baggage update data events ────────────────────────────────────────────
+  new_total_baggages:
+    type: int
+    description: "Provide the requested new total number of checked bags."
+  bags_add_only_valid:
+    type: bool
+    expr: "[new_total_baggages] >= [reservation_current_bag_count]"
+    description: "Baggage update validation failed: new total bag count must be >= current count. Bags can only be added, not removed."
+
+  # ── passenger update data events ──────────────────────────────────────────
+  update_num_passengers:
+    type: int
+    description: "Provide the number of passengers in the passenger-update request."
+  passenger_count_unchanged_valid:
+    type: bool
+    expr: "[update_num_passengers] == [reservation_num_passengers]"
+    description: "Passenger update validation failed: the number of passengers cannot be changed. Submitted count must equal current reservation count."
+
+  # ── compensation data events ──────────────────────────────────────────────
+  user_compensation_eligible:
+    type: bool
+    description: "Provide whether the user is eligible for compensation (silver/gold member, travel insurance holder, or business-class passenger). Regular members without insurance flying economy/basic-economy are not eligible."
+  flight_is_cancelled:
+    type: bool
+    description: "Provide whether the flight was cancelled by the airline."
+  flight_is_delayed:
+    type: bool
+    description: "Provide whether the flight is delayed."
+  # $100/pax for cancellation, $50/pax for delay, $0 otherwise
+  expected_certificate_amount:
+    type: int
+    expr: "if [flight_is_cancelled] then [reservation_num_passengers] * 100 else if [flight_is_delayed] then [reservation_num_passengers] * 50 else 0"
+    description: "Computes the policy-mandated certificate amount from flight status and passenger count."
+  certificate_amount:
+    type: int
+    description: "Provide the certificate amount to be issued."
+  certificate_amount_valid:
+    type: bool
+    expr: "[certificate_amount] == [expected_certificate_amount]"
+    description: "Certificate amount validation failed: amount must equal $100 x passengers for cancelled flights or $50 x passengers for delayed flights."
+
+
+# ── unguarded conditions ──────────────────────────────────────────────────────
+conditions:
+  # Identity before every write action and reservation lookup
+  get_user_details:
+    - book_reservation
+    - get_reservation_details
+    - update_reservation_flights
+    - update_reservation_baggages
+    - update_reservation_passengers
+    - cancel_reservation
+    - send_certificate
+  # Reservation details before modification, cancellation, and compensation
+  get_reservation_details:
+    - update_reservation_flights
+    - update_reservation_baggages
+    - update_reservation_passengers
+    - cancel_reservation
+    - send_certificate
+  # Flight status before modification, cancellation, and compensation
+  get_flight_status:
+    - update_reservation_flights
+    - cancel_reservation
+    - send_certificate
+  # Direct flight search before one-stop
+  search_direct_flight:
+    - search_onestop_flight
+  # Booking parameter data flow
+  booking_num_passengers:
+    - booking_params_valid
+  booking_num_credit_cards:
+    - booking_params_valid
+  booking_num_gift_cards:
+    - booking_params_valid
+  booking_num_certificates:
+    - booking_params_valid
+  booking_params_valid:
+    - book_reservation
+  booking_payment_methods_valid:
+    - book_reservation
+  # Reservation fact data flow
+  reservation_has_flown:
+    - update_reservation_flights
+    - cancel_reservation
+  reservation_is_basic_economy:
+    - update_reservation_flights
+  # Cancellation eligibility data flow: base + 24h → computed → gate
+  reservation_cancellation_eligible_base:
+    - reservation_cancellation_eligible
+  booking_within_24h:
+    - reservation_cancellation_eligible
+  reservation_cancellation_eligible:
+    - cancel_reservation
+  # Modification payment data flow
+  update_payment_in_profile:
+    - update_reservation_flights
+  # Baggage update data flow
+  reservation_current_bag_count:
+    - bags_add_only_valid
+  new_total_baggages:
+    - bags_add_only_valid
+  bags_add_only_valid:
+    - update_reservation_baggages
+  # Passenger update data flow
+  reservation_num_passengers:
+    - passenger_count_unchanged_valid
+    - expected_certificate_amount
+  update_num_passengers:
+    - passenger_count_unchanged_valid
+  passenger_count_unchanged_valid:
+    - update_reservation_passengers
+  # Compensation data flow
+  user_compensation_eligible:
+    - send_certificate
+  flight_is_cancelled:
+    - expected_certificate_amount
+  flight_is_delayed:
+    - expected_certificate_amount
+  expected_certificate_amount:
+    - certificate_amount_valid
+  certificate_amount:
+    - certificate_amount_valid
+  certificate_amount_valid:
+    - send_certificate
+
+
+# ── unguarded excludes ────────────────────────────────────────────────────────
+# Transfer to human agent is terminal — disables all write actions.
+excludes:
+  transfer_to_human_agents:
+    - book_reservation
+    - update_reservation_flights
+    - update_reservation_baggages
+    - update_reservation_passengers
+    - cancel_reservation
+    - send_certificate
+
+
+# ── guarded excludes and includes ─────────────────────────────────────────────
+# Each data gate comes in a pair: exclude when condition fails, include when it passes.
+# [source, target, guard_expression]
+
+guarded_excludes:
+  # Booking: parameter limits
+  - [booking_params_valid,          book_reservation,              "(not [booking_params_valid])"]
+  # Booking: payment methods in profile
+  - [booking_payment_methods_valid, book_reservation,              "(not [booking_payment_methods_valid])"]
+  # Modification: flight already flown
+  - [reservation_has_flown,         update_reservation_flights,    "[reservation_has_flown]"]
+  # Modification: basic economy (conservative — also blocks cabin-only changes)
+  - [reservation_is_basic_economy,  update_reservation_flights,    "[reservation_is_basic_economy]"]
+  # Modification: payment method not in profile
+  - [update_payment_in_profile,     update_reservation_flights,    "(not [update_payment_in_profile])"]
+  # Cancellation: flight already flown
+  - [reservation_has_flown,         cancel_reservation,            "[reservation_has_flown]"]
+  # Cancellation: not eligible
+  - [reservation_cancellation_eligible, cancel_reservation,        "(not [reservation_cancellation_eligible])"]
+  # Baggage: removing bags
+  - [bags_add_only_valid,           update_reservation_baggages,   "(not [bags_add_only_valid])"]
+  # Passengers: changing count
+  - [passenger_count_unchanged_valid, update_reservation_passengers, "(not [passenger_count_unchanged_valid])"]
+  # Compensation: user not eligible
+  - [user_compensation_eligible,    send_certificate,              "(not [user_compensation_eligible])"]
+  # Compensation: wrong certificate amount
+  - [certificate_amount_valid,      send_certificate,              "(not [certificate_amount_valid])"]
+
+guarded_includes:
+  # Booking: parameter limits pass
+  - [booking_params_valid,          book_reservation,              "[booking_params_valid]"]
+  # Booking: payment methods valid
+  - [booking_payment_methods_valid, book_reservation,              "[booking_payment_methods_valid]"]
+  # Modification: no flights flown
+  - [reservation_has_flown,         update_reservation_flights,    "(not [reservation_has_flown])"]
+  # Modification: not basic economy
+  - [reservation_is_basic_economy,  update_reservation_flights,    "(not [reservation_is_basic_economy])"]
+  # Modification: payment method valid
+  - [update_payment_in_profile,     update_reservation_flights,    "[update_payment_in_profile]"]
+  # Cancellation: no flights flown
+  - [reservation_has_flown,         cancel_reservation,            "(not [reservation_has_flown])"]
+  # Cancellation: eligible
+  - [reservation_cancellation_eligible, cancel_reservation,        "[reservation_cancellation_eligible]"]
+  # Baggage: only adding
+  - [bags_add_only_valid,           update_reservation_baggages,   "[bags_add_only_valid]"]
+  # Passengers: count unchanged
+  - [passenger_count_unchanged_valid, update_reservation_passengers, "[passenger_count_unchanged_valid]"]
+  # Compensation: user eligible
+  - [user_compensation_eligible,    send_certificate,              "[user_compensation_eligible]"]
+  # Compensation: correct amount
+  - [certificate_amount_valid,      send_certificate,              "[certificate_amount_valid]"]
+
+
+# ── runtime marking ───────────────────────────────────────────────────────────
+marking:
+  included: all   # all 39 events start included; guarded excludes narrow availability dynamically
