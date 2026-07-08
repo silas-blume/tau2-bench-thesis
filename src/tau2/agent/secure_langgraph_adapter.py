@@ -61,6 +61,10 @@ _VALIDATED_MARKER = "[VALIDATED: delegated to tau2]"
 # Prefix used by SecureToolNode when declining a tool call.
 _DECLINE_PREFIX = "Tool call declined."
 
+# Azure OpenAI rejects messages with more than 128 tool_calls. Cap well below
+# that; the agent enforces single-call-per-turn anyway.
+_MAX_TOOL_CALLS_PER_MSG = 8
+
 
 def _create_stub_tools(tau2_tools: list[Tool]) -> list[StructuredTool]:
     """Create LangChain StructuredTools that match real tool schemas but only
@@ -197,6 +201,18 @@ class SecureLangGraphAdapter(LocalAgent[list]):
 
         for msg in state:
             if isinstance(msg, AIMessage) and msg.tool_calls:
+                # Cap tool_calls to avoid API limits (e.g. Azure max 128).
+                if len(msg.tool_calls) > _MAX_TOOL_CALLS_PER_MSG:
+                    self._logger.warning(
+                        "Capping AIMessage tool_calls from %d to %d to stay within API limits",
+                        len(msg.tool_calls),
+                        _MAX_TOOL_CALLS_PER_MSG,
+                    )
+                    msg = AIMessage(
+                        content=msg.content,
+                        tool_calls=list(msg.tool_calls[:_MAX_TOOL_CALLS_PER_MSG]),
+                        id=msg.id,
+                    )
                 sanitized.append(msg)
                 for tc in msg.tool_calls:
                     tc_id = tc.get("id")
@@ -423,7 +439,7 @@ class SecureLangGraphAdapter(LocalAgent[list]):
                     "args": tc.get("args", {}),
                 }
                 # Return state up to the AIMessage -- drop stub ToolMessages
-                state = updated_messages[: last_ai_idx + 1]
+                state = self._sanitize_tool_messages(updated_messages[: last_ai_idx + 1])
                 out = AssistantMessage(
                     role="assistant",
                     tool_calls=[

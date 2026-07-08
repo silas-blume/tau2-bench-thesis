@@ -12,6 +12,15 @@ clean:
 	rm -rf dist
 	rm -rf build
 
+## Install tau2 and local dependencies as editable; ensures pm4py fork is editable last
+## so pip cannot overwrite it with a non-editable copy that lacks predicate_loader
+.PHONY: install
+install:
+	pip install -e /home/silas/projects/thesis-dpm-secure-langgraph
+	pip install -e /home/silas/projects/pm4py-dcr
+	rm -rf .venv/lib/python*/site-packages/pm4py/
+	pip install -e .
+
 ## Run all tests
 .PHONY: test
 test:
