@@ -134,6 +134,7 @@ class SecureLangGraphAdapter(LocalAgent[list]):
             validator=self.validator,
             secure_node_verbose=secure_node_verbose,
             logger=secure_graph_logger,
+            max_tool_calls_per_message=_MAX_TOOL_CALLS_PER_MSG,
         )
         graph.add_node("agent", self._call_model_node, secure=False)
         # ToolNode is auto-upgraded to SecureToolNode by SecureStateGraph
@@ -519,6 +520,13 @@ class SecureLangGraphAdapter(LocalAgent[list]):
             for key, value in args.items():
                 event[key] = _coerce_numeric(value) if _coerce_numeric else value
         self.trace_collector.get_trace().append(event)
+        # Notify subscribers (e.g. DCRStateTracker) so the committed DCR graph
+        # is updated. Direct .append() bypasses _publish_trace_event, which
+        # means the state tracker never sees the completion event and keeps
+        # declining calls that depend on this tool having executed.
+        _publish = getattr(self.trace_collector, "_publish_trace_event", None)
+        if callable(_publish):
+            _publish(event)
 
         # Truncate output for readability in logs
         output = tool_msg.content or ""
