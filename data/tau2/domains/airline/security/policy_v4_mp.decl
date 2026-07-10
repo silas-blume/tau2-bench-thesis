@@ -61,9 +61,9 @@ Absence[book_reservation] | A.nonfree_baggages > A.total_baggages |
 Absence[book_reservation] | A.total_baggages < 0 | 
 Absence[book_reservation] | A.nonfree_baggages < 0 | 
 Absence[book_reservation] | not all_flights_available(A.flights) | 
-Precedence[get_user_details, update_reservation_flights] |  | T.user_id is reservation_user_id(A.reservation_id) | 
-Precedence[get_user_details, update_reservation_baggages] |  | T.user_id is reservation_user_id(A.reservation_id) | 
-Precedence[get_user_details, update_reservation_passengers] |  | T.user_id is reservation_user_id(A.reservation_id) | 
+Precedence[get_user_details, update_reservation_flights] |  | T.user_id == reservation_user_id(A.reservation_id) | 
+Precedence[get_user_details, update_reservation_baggages] |  | T.user_id == reservation_user_id(A.reservation_id) | 
+Precedence[get_user_details, update_reservation_passengers] |  | T.user_id == reservation_user_id(A.reservation_id) | 
 Precedence[get_reservation_details, update_reservation_flights] |  | T.reservation_id == A.reservation_id | 
 Precedence[get_reservation_details, update_reservation_baggages] |  | T.reservation_id == A.reservation_id | 
 Precedence[get_reservation_details, update_reservation_passengers] |  | T.reservation_id == A.reservation_id | 
@@ -76,11 +76,11 @@ Absence[update_reservation_flights] | route_changed(A.reservation_id, A.flights)
 Absence[update_reservation_flights] | not all_flights_same_cabin_class(A.flights) | 
 Absence[update_reservation_baggages] | A.total_baggages < reservation_baggage_count(A.reservation_id) | 
 Absence[update_reservation_passengers] | count_items(A.passengers) != reservation_passenger_count(A.reservation_id) | 
-Precedence[get_user_details, get_reservation_details] |  | T.user_id is reservation_user_id(A.reservation_id) | 
+Precedence[get_user_details, get_reservation_details] |  | T.user_id == reservation_user_id(A.reservation_id) | 
 Absence[update_reservation_baggages] | A.total_baggages < 0 | 
 Absence[update_reservation_baggages] | A.nonfree_baggages < 0 | 
 Absence[update_reservation_baggages] | A.nonfree_baggages > A.total_baggages | 
-Precedence[get_user_details, cancel_reservation] |  | T.user_id is reservation_user_id(A.reservation_id) | 
+Precedence[get_user_details, cancel_reservation] |  | T.user_id == reservation_user_id(A.reservation_id) | 
 Absence[cancel_reservation] | has_flown_flights(A.reservation_id) | 
 Absence[cancel_reservation] | not cancellation_eligible(A.reservation_id) | 
 Precedence[get_user_details, send_certificate] |  | A.user_id == T.user_id | 

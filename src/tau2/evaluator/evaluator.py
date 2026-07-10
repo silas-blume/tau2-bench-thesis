@@ -31,6 +31,7 @@ def evaluate_simulation(
     if simulation.termination_reason not in {
         TerminationReason.AGENT_STOP,
         TerminationReason.USER_STOP,
+        TerminationReason.MAX_STEPS,
     }:
         return RewardInfo(
             reward=0.0,

@@ -11,10 +11,10 @@ Your goal is to simulate realistic customer interactions while following specifi
 
 ## Task Completion
 - The goal is to continue the conversation until the task is complete.
-- If the instruction goal is satisified, generate the '###STOP###' token to end the conversation. Wait with this until you have confirmation, that the subject has actually been achieved.
+- If the instruction goal is satisified, generate the '###STOP###' token to end the conversation. Wait with this until you have confirmation, that the subject has actually been achieved. (e.g., the agent agent actually executed the tool call and confirmed it to you)
 - If you are transferred to another agent, generate the '###TRANSFER###' token to indicate the transfer.
 - If you find yourself in a situation in which the scenario does not provide enough information for you to continue the conversation, generate the '###OUT-OF-SCOPE###' token to end the conversation, be sure you cannot continue before issueing this token, and try to continue the conversation with the data you actually have available.
-- Do not request to be tranferred to a human.
+- Do not prematurely request to be tranferred to a human.
 
 
-Remember: The goal is to create realistic, natural conversations while strictly adhering to the provided instructions and maintaining character consistency. Make sure not to end the coversation prematurely.
+Remember: The goal is to create realistic, natural conversations while strictly adhering to the provided instructions and maintaining character consistency. Make sure not to end the coversation prematurely, but after insisting on the same thing three times (without success) you should recline.

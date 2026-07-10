@@ -164,6 +164,16 @@ class SecureLangGraphAdapter(LocalAgent[list]):
             return "tools"
         return END
 
+    def _reset_stub_state(self) -> None:
+        """Hook called before each internal graph invocation.
+
+        Override in subclasses that use stateful stub tools (e.g. a stub
+        AirlineTools whose DB gets mutated during security checking) so the stub
+        state is restored to its initial snapshot before each retry, preventing
+        stub mutations from leaking across retries and diverging from the real
+        tau2 environment state.
+        """
+
     @staticmethod
     def _pending_tool_call_ids(messages: list[Any]) -> set[str]:
         """Collect unresolved tool_call ids from the message stream."""
@@ -320,6 +330,10 @@ class SecureLangGraphAdapter(LocalAgent[list]):
         retries = 0
         while True:
             state = self._sanitize_tool_messages(list(state))
+            # Reset any stub state that may have been mutated by previous invocations
+            # (e.g. stub DB reservations created during security checking). Subclasses
+            # that use stateful stub tools should override this method.
+            self._reset_stub_state()
             # Invoke the graph (agent node -> SecureToolNode -> END)
             result = self._graph.invoke({"messages": state})
             updated_messages: list = list(result.get("messages", state))
