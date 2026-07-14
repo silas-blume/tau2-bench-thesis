@@ -1,4 +1,4 @@
-"""Integration tests for the dcr2.xml data-event resolver.
+"""Integration tests for the dcr2.yaml data-event resolver.
 
 dcr2.yaml gates every write tool behind data events (reservation_has_flown,
 booking_payment_methods_valid, etc.) that no ordinary tool call ever
@@ -6,7 +6,7 @@ executes on its own. dcr2_data_resolver.py supplies those values from the
 real FlightDB + the pending tool call's own arguments, wired through
 thesis_dpm_secure_langgraph's data-event resolver hook.
 
-These tests load the *real* dcr2.xml + dcr2_data_resolver.py against the
+These tests load the *real* dcr2.yaml + dcr2_data_resolver.py against the
 *real* db.json (same code path as SecureAirlineAgent.__init__) and replay
 tool-call sequences end-to-end, asserting write actions are enabled when the
 underlying facts justify it and blocked when they don't -- including the
@@ -43,8 +43,10 @@ def resolver():
 
 @pytest.fixture()
 def validator_and_tracker(resolver):
-    constraints = AgentDCRConstraints().parse_data_from_file(
-        str(_SEC_DIR / "dcr2.xml"), data_event_resolver=resolver
+    constraints = AgentDCRConstraints().parse_from_yaml(
+        str(_SEC_DIR / "dcr2.yaml"),
+        data_event_resolver=resolver,
+        predicate_file_path=_SEC_DIR / "dcr2_expr_predicates.py",
     )
     assert isinstance(constraints.to_dcr_graph(), DataDcrGraph)
     return DCRStateValidator(constraints), constraints.get_state_tracker()

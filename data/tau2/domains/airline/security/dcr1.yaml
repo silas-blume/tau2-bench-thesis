@@ -1,6 +1,7 @@
 title: "Airline Agent Policy"
-# Source file for dcr1.xml.  Compile with:
-#   python scripts/compile_dcr_yaml.py data/tau2/domains/airline/security/dcr1.yaml
+# Loaded directly at runtime by SecureAirlineAgent via
+# AgentDCRConstraints.parse_from_yaml (thesis_dpm_secure_langgraph) --
+# compiled straight to an in-memory DataDcrGraph, no XML step needed.
 #
 # Standard DCR (no data events, no guarded relations).
 # All events are void; all relations are unguarded.

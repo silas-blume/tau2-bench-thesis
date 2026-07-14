@@ -92,6 +92,41 @@ def payment_in_profile(user: Any, payment_id: Any) -> bool:
     return str(payment_id) in user.payment_methods
 
 
+def pass_info_complete(passengers: Any) -> bool:
+    """True if every passenger has a first name, last name, and DOB."""
+    parsed = _parse_json_if_str(passengers)
+    if not isinstance(parsed, list) or not parsed:
+        return False
+    for p in parsed:
+        if isinstance(p, dict):
+            first, last, dob = p.get("first_name"), p.get("last_name"), p.get("dob")
+        else:
+            first = getattr(p, "first_name", None)
+            last = getattr(p, "last_name", None)
+            dob = getattr(p, "dob", None)
+        if not first or not last or not dob:
+            return False
+    return True
+
+
+_MEMBERSHIP_CODE = {"regular": 0, "silver": 1, "gold": 2}
+_CABIN_CODE = {"basic_economy": 0, "economy": 1, "business": 2}
+
+
+def membership_code(user: Any) -> int:
+    return _MEMBERSHIP_CODE.get(user.membership, 0)
+
+
+def cabin_code(cabin: Any) -> int:
+    return _CABIN_CODE.get(str(cabin), 0)
+
+
+def payment_method_type_ok(payment_id: Any) -> bool:
+    """True if payment_id is a gift card or credit card (not a certificate)."""
+    pid = str(payment_id).lower()
+    return pid.startswith("credit_card") or pid.startswith("gift_card")
+
+
 # ---------------------------------------------------------------------------
 # Reservation facts
 # ---------------------------------------------------------------------------
@@ -104,6 +139,56 @@ def has_flown(reservation: Any, db: Any) -> bool:
     for fi in reservation.flights:
         status = _flight_status(db, fi.flight_number, fi.date)
         if status in ("flying", "landed"):
+            return True
+    return False
+
+
+def _flight_key(f: Any) -> tuple[str, str]:
+    if isinstance(f, dict):
+        return (str(f.get("flight_number", "")), str(f.get("date", "")))
+    return (str(getattr(f, "flight_number", "")), str(getattr(f, "date", "")))
+
+
+def flights_changed(reservation: Any, flights: Any) -> bool:
+    """True if the submitted flight segments differ from the reservation's
+    current ones (by flight_number+date pair, order-independent). Used to
+    scope the basic-economy "flights cannot be modified" rule to actual
+    flight-segment changes, not cabin-only updates (policy.md explicitly
+    allows cabin changes from basic economy as long as flights don't change).
+    """
+    parsed = _parse_json_if_str(flights)
+    if not isinstance(parsed, list):
+        return True
+    submitted = sorted(_flight_key(f) for f in parsed)
+    current = sorted((fi.flight_number, fi.date) for fi in reservation.flights)
+    return submitted != current
+
+
+def route_changed(reservation: Any, flights: Any, db: Any) -> bool:
+    """True if the submitted flights would change origin, destination, or
+    trip type relative to the reservation's stored route."""
+    parsed = _parse_json_if_str(flights)
+    if not isinstance(parsed, list) or not parsed:
+        return False
+
+    origins, dests = [], []
+    for f in parsed:
+        fn, _ = _flight_key(f)
+        if fn and fn in db.flights:
+            origins.append(db.flights[fn].origin)
+            dests.append(db.flights[fn].destination)
+    if not origins or not dests:
+        return False
+
+    if origins[0] != reservation.origin:
+        return True
+    if reservation.flight_type == "round_trip":
+        if len(parsed) < 2:
+            return True
+        if reservation.destination not in dests:
+            return True
+    else:
+        if dests[-1] != reservation.destination:
             return True
     return False
 

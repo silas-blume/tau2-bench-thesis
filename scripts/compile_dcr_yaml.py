@@ -2,6 +2,20 @@
 """
 DCR YAML → XML_DCR_DATA compiler.
 
+DEPRECATED: no longer part of the runtime load path. SecureAirlineAgent now
+loads dcr1.yaml/dcr2.yaml directly via
+thesis_dpm_secure_langgraph.constraints.AgentDCRConstraints.parse_from_yaml,
+which compiles straight to an in-memory DataDcrGraph -- no XML step, no
+checked-in .xml artifact to keep in sync by hand.
+
+Kept only for optional ad hoc XML export (e.g. viewing a graph in an
+external DCR-portal visualization tool). This script is a verified *subset*
+of thesis_dpm_secure_langgraph's own dcr_yaml_compiler.py: that version adds
+duplicate/unknown-event-id validation and correctly preserves descriptions
+on dict-form void events (a case this script silently drops). Prefer calling
+`thesis_dpm_secure_langgraph.constraints.write_xml`/`compile_to_xml` instead
+of this script for anything beyond casual local use.
+
 Converts the compact DCR YAML format to PM4Py-compatible XML_DCR_DATA files.
 Labels and labelMappings are derived automatically (1-to-1 with event IDs).
 Expression strings use plain < and > — the compiler handles XML escaping.

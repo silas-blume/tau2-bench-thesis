@@ -1,4 +1,4 @@
-"""Data-event resolver for dcr2.yaml / dcr2.xml.
+"""Data-event resolver for dcr2.yaml.
 
 dcr2.yaml gates every state-changing airline tool behind data events
 (``reservation_has_flown``, ``booking_payment_methods_valid``, etc.) that must
@@ -93,6 +93,55 @@ def _booking_payment_methods_valid(event: Any) -> Any:
     return not _p.has_unknown_payment(event.get("payment_methods"), user)
 
 
+def _booking_passengers_info_complete(event: Any) -> Any:
+    return _p.pass_info_complete(event.get("passengers"))
+
+
+def _booking_membership_code(event: Any) -> Any:
+    user = _user(event.get("user_id"))
+    if user is None:
+        return UNRESOLVED
+    return _p.membership_code(user)
+
+
+def _booking_cabin_code(event: Any) -> Any:
+    cabin = event.get("cabin")
+    if not cabin:
+        return UNRESOLVED
+    return _p.cabin_code(cabin)
+
+
+def _booking_total_baggages(event: Any) -> Any:
+    value = event.get("total_baggages")
+    return UNRESOLVED if value is None else value
+
+
+def _booking_nonfree_baggages(event: Any) -> Any:
+    value = event.get("nonfree_baggages")
+    return UNRESOLVED if value is None else value
+
+
+def _update_payment_method_type_valid(event: Any) -> Any:
+    payment_id = event.get("payment_id")
+    if not payment_id:
+        return UNRESOLVED
+    return _p.payment_method_type_ok(payment_id)
+
+
+def _reservation_flights_changed(event: Any) -> Any:
+    reservation = _reservation(event.get("reservation_id"))
+    if reservation is None:
+        return UNRESOLVED
+    return _p.flights_changed(reservation, event.get("flights"))
+
+
+def _reservation_route_changed(event: Any) -> Any:
+    reservation = _reservation(event.get("reservation_id"))
+    if reservation is None:
+        return UNRESOLVED
+    return _p.route_changed(reservation, event.get("flights"), _db())
+
+
 def _reservation_is_basic_economy(event: Any) -> Any:
     reservation = _reservation(event.get("reservation_id"))
     if reservation is None:
@@ -182,6 +231,14 @@ _HANDLERS = {
     "booking_num_gift_cards": _booking_num_gift_cards,
     "booking_num_certificates": _booking_num_certificates,
     "booking_payment_methods_valid": _booking_payment_methods_valid,
+    "booking_passengers_info_complete": _booking_passengers_info_complete,
+    "booking_membership_code": _booking_membership_code,
+    "booking_cabin_code": _booking_cabin_code,
+    "booking_total_baggages": _booking_total_baggages,
+    "booking_nonfree_baggages": _booking_nonfree_baggages,
+    "update_payment_method_type_valid": _update_payment_method_type_valid,
+    "reservation_flights_changed": _reservation_flights_changed,
+    "reservation_route_changed": _reservation_route_changed,
     "reservation_is_basic_economy": _reservation_is_basic_economy,
     "reservation_has_flown": _reservation_has_flown,
     "reservation_cancellation_eligible_base": _reservation_cancellation_eligible_base,

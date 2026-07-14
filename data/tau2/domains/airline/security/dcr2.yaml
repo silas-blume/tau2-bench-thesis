@@ -1,6 +1,7 @@
 title: "Airline Agent Policy — Data-Aware (XML_DCR_DATA)"
-# Source file for dcr2.xml.  Compile with:
-#   python scripts/compile_dcr_yaml.py data/tau2/domains/airline/security/dcr2.yaml
+# Loaded directly at runtime by SecureAirlineAgent via
+# AgentDCRConstraints.parse_from_yaml (thesis_dpm_secure_langgraph) --
+# compiled straight to an in-memory DataDcrGraph, no XML step needed.
 
 # ── events ────────────────────────────────────────────────────────────────────
 # Void events: value is the blocked-message shown at runtime.
@@ -15,8 +16,8 @@ events:
   search_direct_flight: "Direct flight search is not available at this point."
   search_onestop_flight: "One-stop flights cannot be searched before direct flights have been searched. Call search_direct_flight first."
   get_flight_status: "Flight status lookup is not available at this point."
-  book_reservation: "Reservation cannot be booked. Ensure: (1) get_user_details called, (2) booking_params_valid confirms <=5 passengers, <=1 credit card, <=3 gift cards, <=1 certificate, (3) booking_payment_methods_valid confirms payment methods are in user profile. Also unavailable after transfer to human agent."
-  update_reservation_flights: "Flight/cabin update is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) reservation_is_basic_economy is false (for flight changes), (4) update_payment_in_profile confirms payment method is in user profile. Also unavailable after transfer to human agent."
+  book_reservation: "Reservation cannot be booked. Ensure: (1) get_user_details called, (2) booking_params_valid confirms <=5 passengers, <=1 credit card, <=3 gift cards, <=1 certificate, (3) booking_payment_methods_valid confirms payment methods are in user profile, (4) all passengers have first name, last name, and date of birth, (5) nonfree_baggages covers whatever exceeds the membership/cabin free-bag allowance. Also unavailable after transfer to human agent."
+  update_reservation_flights: "Flight/cabin update is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) origin/destination/trip type are unchanged, (4) basic economy reservations do not change flight segments (cabin-only changes are fine), (5) update_payment_in_profile confirms a gift/credit card payment method is in the user profile (not a certificate). Also unavailable after transfer to human agent."
   update_reservation_baggages: "Baggage update is blocked. Ensure: (1) get_user_details and get_reservation_details called, (2) bags_add_only_valid confirms new total >= current. Also unavailable after transfer to human agent."
   update_reservation_passengers: "Passenger update is blocked. Ensure: (1) get_user_details and get_reservation_details called, (2) passenger_count_unchanged_valid confirms the passenger count has not changed. Also unavailable after transfer to human agent."
   cancel_reservation: "Cancellation is blocked. Ensure: (1) get_user_details, get_reservation_details, and get_flight_status called, (2) reservation_has_flown is false, (3) reservation_cancellation_eligible confirms eligibility (business class, airline-cancelled, insured, or booking within 24 h). Also unavailable after transfer to human agent."
@@ -47,14 +48,36 @@ events:
   booking_payment_methods_valid:
     type: bool
     description: "Provide whether all payment methods in the booking are in the user profile. Policy: all payment methods must already be in user profile for safety reasons."
+  # Passenger data completeness (policy.md: first name, last name, DOB required per passenger)
+  booking_passengers_info_complete:
+    type: bool
+    description: "Provide whether every passenger has first name, last name, and date of birth."
+  # Checked-bag allowance table (membership x cabin) -- see baggage_allowance_ok
+  # in dcr2_expr_predicates.py, registered via predicate_registry/FunctionCallExpression.
+  booking_membership_code:
+    type: int
+    description: "Provide the booking user's membership level encoded as an int: regular=0, silver=1, gold=2."
+  booking_cabin_code:
+    type: int
+    description: "Provide the booking cabin class encoded as an int: basic_economy=0, economy=1, business=2."
+  booking_total_baggages:
+    type: int
+    description: "Provide the requested total number of checked bags for the booking."
+  booking_nonfree_baggages:
+    type: int
+    description: "Provide the requested number of non-free (paid) checked bags for the booking."
+  booking_baggage_allowance_valid:
+    type: bool
+    expr: "baggage_allowance_ok([booking_membership_code], [booking_cabin_code], [booking_num_passengers], [booking_total_baggages], [booking_nonfree_baggages])"
+    description: "Checked-bag allowance exceeded: nonfree_baggages must cover whatever is above the membership/cabin free allowance (regular/silver/gold x basic_economy/economy/business, see policy.md)."
   # Combined gate: a single guarded relation must decide book_reservation's
   # included/excluded state, or independent guarded pairs sourced from
   # different events would overwrite each other based on execution order
   # (whichever check fires last wins) instead of composing as AND.
   book_reservation_valid:
     type: bool
-    expr: "[booking_params_valid] and [booking_payment_methods_valid]"
-    description: "Booking blocked: parameter limits and payment-method profile checks must both pass."
+    expr: "[booking_params_valid] and [booking_payment_methods_valid] and [booking_passengers_info_complete] and [booking_baggage_allowance_valid]"
+    description: "Booking blocked: parameter limits, payment-method profile, passenger info completeness, and checked-bag allowance checks must all pass."
 
   # ── reservation fact data events ──────────────────────────────────────────
   reservation_is_basic_economy:
@@ -92,11 +115,28 @@ events:
   update_payment_in_profile:
     type: bool
     description: "Provide whether the payment method supplied for the flight modification is in the user profile. Policy: payment method must already be in user profile for safety reasons."
+  # policy.md: "a single gift card or credit card" -- exactly-one cardinality
+  # is already guaranteed by the API (payment_id is a single string, not a
+  # list); this only needs to additionally rule out certificates.
+  update_payment_method_type_valid:
+    type: bool
+    description: "Provide whether the flight-update payment_id is a gift card or credit card (not a travel certificate)."
+  # policy.md: basic economy flights "cannot be modified" (flight change),
+  # but cabin CAN still be changed from basic economy as long as the actual
+  # flight segments are resubmitted unchanged -- so the basic-economy block
+  # must be conditioned on the flights actually changing, not fire unconditionally.
+  reservation_flights_changed:
+    type: bool
+    description: "Provide whether the submitted flight segments differ from the reservation's current ones."
+  # policy.md: modifications must not change origin, destination, or trip type.
+  reservation_route_changed:
+    type: bool
+    description: "Provide whether the submitted flights would change the reservation's origin, destination, or trip type."
   # Combined gate: single relation, same reasoning as book_reservation_valid.
   update_reservation_flights_valid:
     type: bool
-    expr: "(not [reservation_has_flown]) and (not [reservation_is_basic_economy]) and [update_payment_in_profile]"
-    description: "Flight/cabin update blocked: reservation must be unflown, not basic economy, and the payment method must be in the user profile."
+    expr: "(not ([reservation_is_basic_economy] and [reservation_flights_changed])) and (not [reservation_has_flown]) and (not [reservation_route_changed]) and [update_payment_in_profile] and [update_payment_method_type_valid]"
+    description: "Flight/cabin update blocked: reservation must be unflown, route (origin/destination/trip type) unchanged, basic economy reservations may not change flight segments (cabin-only changes are fine), and the payment method must be a gift/credit card in the user profile."
 
   # ── baggage update data events ────────────────────────────────────────────
   new_total_baggages:
@@ -165,6 +205,7 @@ conditions:
   # Booking parameter data flow
   booking_num_passengers:
     - booking_params_valid
+    - booking_baggage_allowance_valid
   booking_num_credit_cards:
     - booking_params_valid
   booking_num_gift_cards:
@@ -174,6 +215,18 @@ conditions:
   booking_params_valid:
     - book_reservation_valid
   booking_payment_methods_valid:
+    - book_reservation_valid
+  booking_passengers_info_complete:
+    - book_reservation_valid
+  booking_membership_code:
+    - booking_baggage_allowance_valid
+  booking_cabin_code:
+    - booking_baggage_allowance_valid
+  booking_total_baggages:
+    - booking_baggage_allowance_valid
+  booking_nonfree_baggages:
+    - booking_baggage_allowance_valid
+  booking_baggage_allowance_valid:
     - book_reservation_valid
   book_reservation_valid:
     - book_reservation
@@ -194,6 +247,12 @@ conditions:
     - cancel_reservation
   # Modification payment data flow
   update_payment_in_profile:
+    - update_reservation_flights_valid
+  update_payment_method_type_valid:
+    - update_reservation_flights_valid
+  reservation_flights_changed:
+    - update_reservation_flights_valid
+  reservation_route_changed:
     - update_reservation_flights_valid
   update_reservation_flights_valid:
     - update_reservation_flights
@@ -268,4 +327,4 @@ guarded_includes:
 
 # ── runtime marking ───────────────────────────────────────────────────────────
 marking:
-  included: all   # all 39 events start included; guarded excludes narrow availability dynamically
+  included: all   # all 47 events start included; guarded excludes narrow availability dynamically

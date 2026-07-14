@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional, cast
 import logging
 
+import yaml
 from langchain_core.tools import StructuredTool
 from langchain_litellm import ChatLiteLLM
 
@@ -103,6 +104,22 @@ def _load_data_event_resolver(path: Path):
 	return resolve_fn
 
 
+def _looks_like_dcr_yaml(path: Path) -> bool:
+	"""Sniff whether a ``.yaml`` policy file is DCR-YAML rather than Declare-YAML.
+
+	Both dialects share the ``.yaml`` suffix, so suffix alone can't route
+	between them the way it does for ``.xml``. DCR-YAML always declares both
+	top-level ``events`` and ``marking`` keys; Declare-YAML uses
+	``activities``/``constraints`` instead and never has either -- verified
+	against dcr1.yaml, dcr2.yaml, and policy_v4.yaml.
+	"""
+	try:
+		data = yaml.safe_load(path.read_text(encoding="utf-8"))
+	except yaml.YAMLError:
+		return False
+	return isinstance(data, dict) and "events" in data and "marking" in data
+
+
 def build_secure_system_prompt(domain_policy: str, soft_agent: bool = False) -> str:
 	agent_instruction = SOFT_AGENT_INSTRUCTION if soft_agent else AGENT_INSTRUCTION
 	return SYSTEM_PROMPT.format(
@@ -191,6 +208,27 @@ class SecureAirlineAgent(SecureLangGraphAdapter):
 				)
 			else:
 				constraints = AgentDCRConstraints().parse_from_file(str(policy_path))
+			validator = DCRStateValidator(constraints)
+			predicate_path = None
+		elif policy_path.suffix in (".yaml", ".yml") and _looks_like_dcr_yaml(policy_path):
+			# DCR-YAML — compiled directly to an in-memory DataDcrGraph by
+			# thesis_dpm_secure_langgraph, no XML round-trip. Same sibling
+			# "<stem>_data_resolver.py" convention as the .xml DCR path above.
+			resolver_path = policy_path.parent / f"{policy_path.stem}_data_resolver.py"
+			data_event_resolver = (
+				_load_data_event_resolver(resolver_path) if resolver_path.exists() else None
+			)
+			# Separate sibling convention for FunctionCallExpression predicates
+			# (graph.predicate_registry, engine-level) -- deliberately a
+			# different file/naming than "<stem>_data_resolver.py" (the
+			# DataEventResolver hook), since they're two unrelated mechanisms;
+			# see DCR_DATA_ARCHITECTURE.md §2.6/§6.
+			expr_predicate_path = policy_path.parent / f"{policy_path.stem}_expr_predicates.py"
+			constraints = AgentDCRConstraints().parse_from_yaml(
+				str(policy_path),
+				data_event_resolver=data_event_resolver,
+				predicate_file_path=expr_predicate_path if expr_predicate_path.exists() else None,
+			)
 			validator = DCRStateValidator(constraints)
 			predicate_path = None
 		else:
