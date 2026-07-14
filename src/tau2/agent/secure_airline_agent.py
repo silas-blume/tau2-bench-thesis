@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import uuid
@@ -80,6 +81,28 @@ SYSTEM_PROMPT = """\
 """.strip()
 
 
+def _load_data_event_resolver(path: Path):
+	"""Dynamically import a "<stem>_data_resolver.py" sibling file and return
+	its top-level ``resolve`` function, for use as a DCR data-event resolver.
+
+	Same dynamic-file-import idiom already used for Declare predicate files
+	(and internally by pm4py's own predicate loader) -- the file lives next
+	to the policy it supports and is not a normal importable package member.
+	"""
+	spec = importlib.util.spec_from_file_location(
+		f"tau2_dcr_data_resolver_{path.stem}", path
+	)
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+	resolve_fn = getattr(module, "resolve", None)
+	if resolve_fn is None:
+		raise RuntimeError(
+			f"Data resolver file '{path}' must define a top-level "
+			"'resolve(event_id, event, graph)' function."
+		)
+	return resolve_fn
+
+
 def build_secure_system_prompt(domain_policy: str, soft_agent: bool = False) -> str:
 	agent_instruction = SOFT_AGENT_INSTRUCTION if soft_agent else AGENT_INSTRUCTION
 	return SYSTEM_PROMPT.format(
@@ -145,9 +168,27 @@ class SecureAirlineAgent(SecureLangGraphAdapter):
 
 		if policy_path.suffix == ".xml":
 			# DCR graph — auto-detect data-aware vs standard by sniffing the file.
+			# dataType/decision/guard are XML *attributes* in this format
+			# (e.g. `dataType="bool"`), never element tags, so the sniff must
+			# look for the attribute form -- a bare "<dataType"/"<dataMappings"
+			# substring never occurs and would always route data-aware files
+			# through the plain (non-data-aware) importer variant, silently
+			# dropping every guard/decision/input-event in the graph.
 			xml_text = policy_path.read_text(encoding="utf-8")
-			if "<dataType" in xml_text or "<dataMappings" in xml_text:
-				constraints = AgentDCRConstraints().parse_data_from_file(str(policy_path))
+			if 'dataType="' in xml_text:
+				# Data-aware graphs may declare input/decision events (e.g.
+				# reservation_has_flown) that no tool call ever executes on
+				# its own. A sibling "<stem>_data_resolver.py" (same naming
+				# convention as the Declare predicate file below) supplies
+				# real values for them, if present.
+				resolver_path = policy_path.parent / f"{policy_path.stem}_data_resolver.py"
+				data_event_resolver = (
+					_load_data_event_resolver(resolver_path) if resolver_path.exists() else None
+				)
+				constraints = AgentDCRConstraints().parse_data_from_file(
+					str(policy_path),
+					data_event_resolver=data_event_resolver,
+				)
 			else:
 				constraints = AgentDCRConstraints().parse_from_file(str(policy_path))
 			validator = DCRStateValidator(constraints)

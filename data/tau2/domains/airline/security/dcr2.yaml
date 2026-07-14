@@ -47,6 +47,14 @@ events:
   booking_payment_methods_valid:
     type: bool
     description: "Provide whether all payment methods in the booking are in the user profile. Policy: all payment methods must already be in user profile for safety reasons."
+  # Combined gate: a single guarded relation must decide book_reservation's
+  # included/excluded state, or independent guarded pairs sourced from
+  # different events would overwrite each other based on execution order
+  # (whichever check fires last wins) instead of composing as AND.
+  book_reservation_valid:
+    type: bool
+    expr: "[booking_params_valid] and [booking_payment_methods_valid]"
+    description: "Booking blocked: parameter limits and payment-method profile checks must both pass."
 
   # ── reservation fact data events ──────────────────────────────────────────
   reservation_is_basic_economy:
@@ -74,11 +82,21 @@ events:
   reservation_num_passengers:
     type: int
     description: "Provide the number of passengers in the reservation."
+  # Combined gate: single relation, same reasoning as book_reservation_valid.
+  cancel_reservation_valid:
+    type: bool
+    expr: "(not [reservation_has_flown]) and [reservation_cancellation_eligible]"
+    description: "Cancellation blocked: reservation must be unflown and eligible for cancellation."
 
   # ── modification payment data event ───────────────────────────────────────
   update_payment_in_profile:
     type: bool
     description: "Provide whether the payment method supplied for the flight modification is in the user profile. Policy: payment method must already be in user profile for safety reasons."
+  # Combined gate: single relation, same reasoning as book_reservation_valid.
+  update_reservation_flights_valid:
+    type: bool
+    expr: "(not [reservation_has_flown]) and (not [reservation_is_basic_economy]) and [update_payment_in_profile]"
+    description: "Flight/cabin update blocked: reservation must be unflown, not basic economy, and the payment method must be in the user profile."
 
   # ── baggage update data events ────────────────────────────────────────────
   new_total_baggages:
@@ -102,24 +120,20 @@ events:
   user_compensation_eligible:
     type: bool
     description: "Provide whether the user is eligible for compensation (silver/gold member, travel insurance holder, or business-class passenger). Regular members without insurance flying economy/basic-economy are not eligible."
-  flight_is_cancelled:
-    type: bool
-    description: "Provide whether the flight was cancelled by the airline."
-  flight_is_delayed:
-    type: bool
-    description: "Provide whether the flight is delayed."
-  # $100/pax for cancellation, $50/pax for delay, $0 otherwise
-  expected_certificate_amount:
-    type: int
-    expr: "if [flight_is_cancelled] then [reservation_num_passengers] * 100 else if [flight_is_delayed] then [reservation_num_passengers] * 50 else 0"
-    description: "Computes the policy-mandated certificate amount from flight status and passenger count."
-  certificate_amount:
-    type: int
-    description: "Provide the certificate amount to be issued."
+  # Reservation-scoped facts (flight status, passenger count) can't be
+  # resolved from send_certificate's own args (user_id, amount only -- no
+  # reservation_id), so amount validity is provided directly as a single
+  # input event checked against the set of valid amounts ($100/pax for any
+  # of the user's reservations with a cancelled flight, $50/pax for any with
+  # a delayed flight) across all of the user's reservations.
   certificate_amount_valid:
     type: bool
-    expr: "[certificate_amount] == [expected_certificate_amount]"
-    description: "Certificate amount validation failed: amount must equal $100 x passengers for cancelled flights or $50 x passengers for delayed flights."
+    description: "Provide whether the certificate amount is valid: $100 x passengers for any of the user's reservations with a cancelled flight, or $50 x passengers for any with a delayed flight."
+  # Combined gate: single relation, same reasoning as book_reservation_valid.
+  send_certificate_valid:
+    type: bool
+    expr: "[user_compensation_eligible] and [certificate_amount_valid]"
+    description: "Certificate blocked: user must be compensation-eligible and the amount must be valid."
 
 
 # ── unguarded conditions ──────────────────────────────────────────────────────
@@ -158,24 +172,30 @@ conditions:
   booking_num_certificates:
     - booking_params_valid
   booking_params_valid:
-    - book_reservation
+    - book_reservation_valid
   booking_payment_methods_valid:
+    - book_reservation_valid
+  book_reservation_valid:
     - book_reservation
   # Reservation fact data flow
   reservation_has_flown:
-    - update_reservation_flights
-    - cancel_reservation
+    - update_reservation_flights_valid
+    - cancel_reservation_valid
   reservation_is_basic_economy:
-    - update_reservation_flights
+    - update_reservation_flights_valid
   # Cancellation eligibility data flow: base + 24h → computed → gate
   reservation_cancellation_eligible_base:
     - reservation_cancellation_eligible
   booking_within_24h:
     - reservation_cancellation_eligible
   reservation_cancellation_eligible:
+    - cancel_reservation_valid
+  cancel_reservation_valid:
     - cancel_reservation
   # Modification payment data flow
   update_payment_in_profile:
+    - update_reservation_flights_valid
+  update_reservation_flights_valid:
     - update_reservation_flights
   # Baggage update data flow
   reservation_current_bag_count:
@@ -187,23 +207,16 @@ conditions:
   # Passenger update data flow
   reservation_num_passengers:
     - passenger_count_unchanged_valid
-    - expected_certificate_amount
   update_num_passengers:
     - passenger_count_unchanged_valid
   passenger_count_unchanged_valid:
     - update_reservation_passengers
   # Compensation data flow
   user_compensation_eligible:
-    - send_certificate
-  flight_is_cancelled:
-    - expected_certificate_amount
-  flight_is_delayed:
-    - expected_certificate_amount
-  expected_certificate_amount:
-    - certificate_amount_valid
-  certificate_amount:
-    - certificate_amount_valid
+    - send_certificate_valid
   certificate_amount_valid:
+    - send_certificate_valid
+  send_certificate_valid:
     - send_certificate
 
 
@@ -224,52 +237,33 @@ excludes:
 # [source, target, guard_expression]
 
 guarded_excludes:
-  # Booking: parameter limits
-  - [booking_params_valid,          book_reservation,              "(not [booking_params_valid])"]
-  # Booking: payment methods in profile
-  - [booking_payment_methods_valid, book_reservation,              "(not [booking_payment_methods_valid])"]
-  # Modification: flight already flown
-  - [reservation_has_flown,         update_reservation_flights,    "[reservation_has_flown]"]
-  # Modification: basic economy (conservative — also blocks cabin-only changes)
-  - [reservation_is_basic_economy,  update_reservation_flights,    "[reservation_is_basic_economy]"]
-  # Modification: payment method not in profile
-  - [update_payment_in_profile,     update_reservation_flights,    "(not [update_payment_in_profile])"]
-  # Cancellation: flight already flown
-  - [reservation_has_flown,         cancel_reservation,            "[reservation_has_flown]"]
-  # Cancellation: not eligible
-  - [reservation_cancellation_eligible, cancel_reservation,        "(not [reservation_cancellation_eligible])"]
+  # Booking: combined gate (parameter limits AND payment methods in profile).
+  # A single relation per target is required -- independent guarded pairs
+  # sourced from different events would overwrite each other's effect on
+  # `included` based on execution order instead of composing as AND.
+  - [book_reservation_valid,        book_reservation,              "(not [book_reservation_valid])"]
+  # Modification: combined gate (unflown AND not basic economy AND payment method in profile)
+  - [update_reservation_flights_valid, update_reservation_flights, "(not [update_reservation_flights_valid])"]
+  # Cancellation: combined gate (unflown AND eligible)
+  - [cancel_reservation_valid,      cancel_reservation,            "(not [cancel_reservation_valid])"]
   # Baggage: removing bags
   - [bags_add_only_valid,           update_reservation_baggages,   "(not [bags_add_only_valid])"]
   # Passengers: changing count
   - [passenger_count_unchanged_valid, update_reservation_passengers, "(not [passenger_count_unchanged_valid])"]
-  # Compensation: user not eligible
-  - [user_compensation_eligible,    send_certificate,              "(not [user_compensation_eligible])"]
-  # Compensation: wrong certificate amount
-  - [certificate_amount_valid,      send_certificate,              "(not [certificate_amount_valid])"]
+  # Compensation: combined gate (eligible AND correct amount)
+  - [send_certificate_valid,        send_certificate,              "(not [send_certificate_valid])"]
 
 guarded_includes:
-  # Booking: parameter limits pass
-  - [booking_params_valid,          book_reservation,              "[booking_params_valid]"]
-  # Booking: payment methods valid
-  - [booking_payment_methods_valid, book_reservation,              "[booking_payment_methods_valid]"]
-  # Modification: no flights flown
-  - [reservation_has_flown,         update_reservation_flights,    "(not [reservation_has_flown])"]
-  # Modification: not basic economy
-  - [reservation_is_basic_economy,  update_reservation_flights,    "(not [reservation_is_basic_economy])"]
-  # Modification: payment method valid
-  - [update_payment_in_profile,     update_reservation_flights,    "[update_payment_in_profile]"]
-  # Cancellation: no flights flown
-  - [reservation_has_flown,         cancel_reservation,            "(not [reservation_has_flown])"]
-  # Cancellation: eligible
-  - [reservation_cancellation_eligible, cancel_reservation,        "[reservation_cancellation_eligible]"]
+  # Booking: combined gate passes
+  - [book_reservation_valid,        book_reservation,              "[book_reservation_valid]"]
+  # Modification: combined gate passes
+  - [update_reservation_flights_valid, update_reservation_flights, "[update_reservation_flights_valid]"]
+  # Cancellation: combined gate passes
+  - [cancel_reservation_valid,      cancel_reservation,            "[cancel_reservation_valid]"]
   # Baggage: only adding
   - [bags_add_only_valid,           update_reservation_baggages,   "[bags_add_only_valid]"]
   # Passengers: count unchanged
   - [passenger_count_unchanged_valid, update_reservation_passengers, "[passenger_count_unchanged_valid]"]
-  # Compensation: user eligible
-  - [user_compensation_eligible,    send_certificate,              "[user_compensation_eligible]"]
-  # Compensation: correct amount
-  - [certificate_amount_valid,      send_certificate,              "[certificate_amount_valid]"]
 
 
 # ── runtime marking ───────────────────────────────────────────────────────────
