@@ -11,7 +11,14 @@ policy_v3.yaml.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
+
+# Matches dcr2_data_resolver.py's _SIMULATED_NOW: predicates run against the
+# live DB clock, which would always fail the 24h check for historical
+# simulation scenarios, so both formalisms pin "now" to the same fixed
+# instant instead of using datetime.now().
+_SIMULATED_NOW = "2024-05-15T15:00:00"
 
 
 # ---------------------------------------------------------------------------
@@ -263,10 +270,17 @@ def compensation_eligible(user_id: Any) -> bool:
 
 
 def valid_certificate_amount(user_id: Any, amount: Any) -> bool:
-    """Return True if the amount matches $100/pax (cancelled) or $50/pax (delayed)."""
+    """Return True if the amount matches $100/pax (cancelled) or $50/pax (delayed).
+
+    Fail-closed: a user with no disrupted reservation has an empty
+    valid-amounts set, so no amount is valid -- previously this fell back to
+    `True` ("nothing to check against"), which is exactly the gap
+    dcr2_predicates.valid_certificate_amount's docstring calls out as wrong
+    for a guardrail (its fix is mirrored here).
+    """
     db = _get_db()
     if db is None:
-        return True
+        return False
     try:
         amt = int(amount)
     except (ValueError, TypeError):
@@ -298,7 +312,7 @@ def valid_certificate_amount(user_id: Any, amount: Any) -> bool:
             valid.add(100 * npax)
         if delayed:
             valid.add(50 * npax)
-    return amt in valid if valid else True
+    return amt in valid
 
 
 def all_flights_available(flights: Any) -> bool:
@@ -446,25 +460,45 @@ def reservation_trip_type(reservation_id: Any) -> str:
 # Cancellation eligibility
 # ===========================================================================
 
+def booking_within_24h(reservation_id: Any) -> bool:
+    """Return True if the reservation was created within the last 24 hours
+    of the simulated "now" instant (see _SIMULATED_NOW), mirroring dcr2's
+    booking_within_24h (dcr2_data_resolver.py / dcr2_predicates.py)."""
+    db = _get_db()
+    if db is None:
+        return False  # fail closed; nothing to check against
+    rid = str(reservation_id)
+    if rid not in db.reservations:
+        return False
+    res = db.reservations[rid]
+    created = datetime.fromisoformat(res.created_at)
+    now = datetime.fromisoformat(_SIMULATED_NOW)
+    return 0 <= (now - created).total_seconds() <= 86400
+
+
 def cancellation_eligible(reservation_id: Any) -> bool:
     """Return True if the reservation is eligible for cancellation per policy.
 
     Eligible when any of the following hold:
+      - Booked within the last 24 hours (see booking_within_24h)
       - Business class reservation (always refundable/cancellable)
       - Travel insurance is present (health/weather cancellations covered)
       - At least one flight in the reservation was cancelled by the airline
 
-    NOTE: The 24-hour booking window criterion is deliberately NOT checked here
-    because predicates execute against the live DB clock, which would always
-    fail for historical simulation scenarios.  Agents must verify the 24h
-    window themselves per policy.md.
+    NOTE: this still doesn't verify the cancellation *reason* matches
+    "health/weather" for the insurance branch -- dcr2's cancellation_eligible_base
+    has the identical gap (rules-translation-dcr-analysis.md, R35), so this
+    is not a place where Declare is behind DCR; both are equally permissive
+    here.
     """
     db = _get_db()
     if db is None:
-        return True  # fail open; agent must still verify
+        return False  # fail closed; agent must still verify
     rid = str(reservation_id)
     if rid not in db.reservations:
         return False
+    if booking_within_24h(reservation_id):
+        return True
     res = db.reservations[rid]
     # Business class is always cancellable with a refund
     if res.cabin == "business":

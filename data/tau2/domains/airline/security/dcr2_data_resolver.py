@@ -13,8 +13,19 @@ sibling-file convention. Must expose a top-level
 ``resolve(event_id, event, graph)`` function matching
 ``thesis_dpm_secure_langgraph.constraints.data_resolver.DataEventResolver``.
 
-This file owns all DB access and event-argument extraction (the "is the
-data even available yet" plumbing); the actual predicate logic lives in
+Built on ``thesis_dpm_secure_langgraph``'s ``ResolverRegistry``: 20 of the 24
+input events are a plain "extract a tool-call argument, optionally look up
+one DB entity by it, call a predicate" shape, expressed below as one-line
+``@registry.input_event(...)`` registrations. The remaining 4
+(``booking_cabin_code``, ``update_payment_method_type_valid``,
+``booking_within_24h``, ``update_payment_in_profile``) don't fit that shape
+exactly -- either their missing-value check isn't a plain ``is None`` (a
+falsy check that also rejects an empty string), or they need a value derived
+from an already-looked-up entity's own attribute rather than from a second
+raw event field -- and are registered directly against the raw ``event``
+instead, preserving their exact original behavior. Either way, this file
+owns DB access and event-argument extraction (the "is the data even
+available yet" plumbing); the actual predicate logic lives in
 ``dcr2_predicates.py`` (also loaded dynamically, from this same directory)
 as pure functions over already-looked-up domain objects -- see that file's
 docstring for why fail-closed behavior lives here rather than there.
@@ -26,7 +37,7 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
-from thesis_dpm_secure_langgraph import UNRESOLVED
+from thesis_dpm_secure_langgraph import UNRESOLVED, ResolverRegistry
 
 _MODULE_DIR = Path(__file__).resolve().parent
 
@@ -66,128 +77,153 @@ def _user(user_id: Any):
     return _db().users.get(str(user_id))
 
 
+registry = ResolverRegistry(entity_resolvers={"reservation": _reservation, "user": _user})
+
+
 # ---------------------------------------------------------------------------
-# Per-event resolution handlers
+# Sugared handlers -- extract args / look up one entity / call a predicate
 # ---------------------------------------------------------------------------
 
-def _booking_num_passengers(event: Any) -> Any:
-    return _p.count_items(event.get("passengers"))
+@registry.input_event("booking_num_passengers", args=("passengers",))
+def booking_num_passengers(passengers):
+    return _p.count_items(passengers)
 
 
-def _booking_num_credit_cards(event: Any) -> Any:
-    return _p.count_credit_cards(event.get("payment_methods"))
+@registry.input_event("booking_num_credit_cards", args=("payment_methods",))
+def booking_num_credit_cards(payment_methods):
+    return _p.count_credit_cards(payment_methods)
 
 
-def _booking_num_gift_cards(event: Any) -> Any:
-    return _p.count_gift_cards(event.get("payment_methods"))
+@registry.input_event("booking_num_gift_cards", args=("payment_methods",))
+def booking_num_gift_cards(payment_methods):
+    return _p.count_gift_cards(payment_methods)
 
 
-def _booking_num_certificates(event: Any) -> Any:
-    return _p.count_certificates(event.get("payment_methods"))
+@registry.input_event("booking_num_certificates", args=("payment_methods",))
+def booking_num_certificates(payment_methods):
+    return _p.count_certificates(payment_methods)
 
 
-def _booking_payment_methods_valid(event: Any) -> Any:
-    user = _user(event.get("user_id"))
-    if user is None:
-        return UNRESOLVED
-    return not _p.has_unknown_payment(event.get("payment_methods"), user)
+@registry.input_event("booking_payment_methods_valid", args=("payment_methods",), lookup="user")
+def booking_payment_methods_valid(user, payment_methods):
+    return not _p.has_unknown_payment(payment_methods, user)
 
 
-def _booking_passengers_info_complete(event: Any) -> Any:
-    return _p.pass_info_complete(event.get("passengers"))
+@registry.input_event("booking_passengers_info_complete", args=("passengers",))
+def booking_passengers_info_complete(passengers):
+    return _p.pass_info_complete(passengers)
 
 
-def _booking_membership_code(event: Any) -> Any:
-    user = _user(event.get("user_id"))
-    if user is None:
-        return UNRESOLVED
+@registry.input_event("booking_membership_code", lookup="user")
+def booking_membership_code(user):
     return _p.membership_code(user)
 
 
-def _booking_cabin_code(event: Any) -> Any:
+@registry.input_event("booking_total_baggages", args=("total_baggages",), require=("total_baggages",))
+def booking_total_baggages(total_baggages):
+    return total_baggages
+
+
+@registry.input_event("booking_nonfree_baggages", args=("nonfree_baggages",), require=("nonfree_baggages",))
+def booking_nonfree_baggages(nonfree_baggages):
+    return nonfree_baggages
+
+
+@registry.input_event("reservation_flights_changed", args=("flights",), lookup="reservation")
+def reservation_flights_changed(reservation, flights):
+    return _p.flights_changed(reservation, flights)
+
+
+@registry.input_event("reservation_route_changed", args=("flights",), lookup="reservation")
+def reservation_route_changed(reservation, flights):
+    return _p.route_changed(reservation, flights, _db())
+
+
+@registry.input_event("reservation_is_basic_economy", lookup="reservation")
+def reservation_is_basic_economy(reservation):
+    return _p.is_basic_economy(reservation)
+
+
+@registry.input_event("reservation_has_flown", lookup="reservation")
+def reservation_has_flown(reservation):
+    return _p.has_flown(reservation, _db())
+
+
+@registry.input_event("reservation_cancellation_eligible_base", lookup="reservation")
+def reservation_cancellation_eligible_base(reservation):
+    return _p.cancellation_eligible_base(reservation, _db())
+
+
+@registry.input_event("reservation_current_bag_count", lookup="reservation")
+def reservation_current_bag_count(reservation):
+    return _p.baggage_count(reservation)
+
+
+@registry.input_event("reservation_num_passengers", lookup="reservation")
+def reservation_num_passengers(reservation):
+    return _p.passenger_count(reservation)
+
+
+@registry.input_event("new_total_baggages", args=("total_baggages",), require=("total_baggages",))
+def new_total_baggages(total_baggages):
+    return total_baggages
+
+
+@registry.input_event("update_num_passengers", args=("passengers",), require=("passengers",))
+def update_num_passengers(passengers):
+    return _p.count_items(passengers)
+
+
+@registry.input_event("user_compensation_eligible", lookup="user")
+def user_compensation_eligible(user):
+    return _p.compensation_eligible(user, _db())
+
+
+@registry.input_event("certificate_amount_valid", args=("amount",), require=("amount",), lookup="user")
+def certificate_amount_valid(user, amount):
+    return _p.valid_certificate_amount(user, amount, _db())
+
+
+# ---------------------------------------------------------------------------
+# Escape-hatch handlers -- don't fit the sugar exactly, kept explicit rather
+# than bending the registry API to special-case them (see module docstring)
+# ---------------------------------------------------------------------------
+
+@registry.input_event("booking_cabin_code")
+def booking_cabin_code(event: Any) -> Any:
+    # Falsy check (not a plain `is None`) -- an empty-string cabin is also
+    # treated as missing, matching the original handler exactly.
     cabin = event.get("cabin")
     if not cabin:
         return UNRESOLVED
     return _p.cabin_code(cabin)
 
 
-def _booking_total_baggages(event: Any) -> Any:
-    value = event.get("total_baggages")
-    return UNRESOLVED if value is None else value
-
-
-def _booking_nonfree_baggages(event: Any) -> Any:
-    value = event.get("nonfree_baggages")
-    return UNRESOLVED if value is None else value
-
-
-def _update_payment_method_type_valid(event: Any) -> Any:
+@registry.input_event("update_payment_method_type_valid")
+def update_payment_method_type_valid(event: Any) -> Any:
+    # Falsy check, same reasoning as booking_cabin_code above.
     payment_id = event.get("payment_id")
     if not payment_id:
         return UNRESOLVED
     return _p.payment_method_type_ok(payment_id)
 
 
-def _reservation_flights_changed(event: Any) -> Any:
-    reservation = _reservation(event.get("reservation_id"))
-    if reservation is None:
-        return UNRESOLVED
-    return _p.flights_changed(reservation, event.get("flights"))
-
-
-def _reservation_route_changed(event: Any) -> Any:
-    reservation = _reservation(event.get("reservation_id"))
-    if reservation is None:
-        return UNRESOLVED
-    return _p.route_changed(reservation, event.get("flights"), _db())
-
-
-def _reservation_is_basic_economy(event: Any) -> Any:
-    reservation = _reservation(event.get("reservation_id"))
-    if reservation is None:
-        return UNRESOLVED
-    return _p.is_basic_economy(reservation)
-
-
-def _reservation_has_flown(event: Any) -> Any:
-    reservation = _reservation(event.get("reservation_id"))
-    if reservation is None:
-        return UNRESOLVED
-    return _p.has_flown(reservation, _db())
-
-
-def _reservation_cancellation_eligible_base(event: Any) -> Any:
-    reservation = _reservation(event.get("reservation_id"))
-    if reservation is None:
-        return UNRESOLVED
-    return _p.cancellation_eligible_base(reservation, _db())
-
-
-def _booking_within_24h(event: Any) -> Any:
+@registry.input_event("booking_within_24h")
+def booking_within_24h(event: Any) -> Any:
+    # Post-lookup attribute check (reservation.created_at) beyond a plain
+    # entity-found check -- not expressible via lookup= alone.
     reservation = _reservation(event.get("reservation_id"))
     if reservation is None or not reservation.created_at:
         return UNRESOLVED
-    try:
-        return _p.booking_within_24h(reservation, _SIMULATED_NOW)
-    except ValueError:
-        return UNRESOLVED
+    return _p.booking_within_24h(reservation, _SIMULATED_NOW)
 
 
-def _reservation_current_bag_count(event: Any) -> Any:
-    reservation = _reservation(event.get("reservation_id"))
-    if reservation is None:
-        return UNRESOLVED
-    return _p.baggage_count(reservation)
-
-
-def _reservation_num_passengers(event: Any) -> Any:
-    reservation = _reservation(event.get("reservation_id"))
-    if reservation is None:
-        return UNRESOLVED
-    return _p.passenger_count(reservation)
-
-
-def _update_payment_in_profile(event: Any) -> Any:
+@registry.input_event("update_payment_in_profile")
+def update_payment_in_profile(event: Any) -> Any:
+    # Chained lookup: `user` is derived from `reservation.user_id` (an
+    # already-looked-up entity's own attribute), not from a raw event
+    # field -- the one shape ResolverRegistry's lookup= mode deliberately
+    # doesn't cover (see resolver_registry.py's docstring).
     reservation = _reservation(event.get("reservation_id"))
     payment_id = event.get("payment_id")
     if reservation is None or not payment_id:
@@ -198,70 +234,4 @@ def _update_payment_in_profile(event: Any) -> Any:
     return _p.payment_in_profile(user, payment_id)
 
 
-def _new_total_baggages(event: Any) -> Any:
-    value = event.get("total_baggages")
-    return UNRESOLVED if value is None else value
-
-
-def _update_num_passengers(event: Any) -> Any:
-    passengers = event.get("passengers")
-    if passengers is None:
-        return UNRESOLVED
-    return _p.count_items(passengers)
-
-
-def _user_compensation_eligible(event: Any) -> Any:
-    user = _user(event.get("user_id"))
-    if user is None:
-        return UNRESOLVED
-    return _p.compensation_eligible(user, _db())
-
-
-def _certificate_amount_valid(event: Any) -> Any:
-    user = _user(event.get("user_id"))
-    amount = event.get("amount")
-    if user is None or amount is None:
-        return UNRESOLVED
-    return _p.valid_certificate_amount(user, amount, _db())
-
-
-_HANDLERS = {
-    "booking_num_passengers": _booking_num_passengers,
-    "booking_num_credit_cards": _booking_num_credit_cards,
-    "booking_num_gift_cards": _booking_num_gift_cards,
-    "booking_num_certificates": _booking_num_certificates,
-    "booking_payment_methods_valid": _booking_payment_methods_valid,
-    "booking_passengers_info_complete": _booking_passengers_info_complete,
-    "booking_membership_code": _booking_membership_code,
-    "booking_cabin_code": _booking_cabin_code,
-    "booking_total_baggages": _booking_total_baggages,
-    "booking_nonfree_baggages": _booking_nonfree_baggages,
-    "update_payment_method_type_valid": _update_payment_method_type_valid,
-    "reservation_flights_changed": _reservation_flights_changed,
-    "reservation_route_changed": _reservation_route_changed,
-    "reservation_is_basic_economy": _reservation_is_basic_economy,
-    "reservation_has_flown": _reservation_has_flown,
-    "reservation_cancellation_eligible_base": _reservation_cancellation_eligible_base,
-    "booking_within_24h": _booking_within_24h,
-    "reservation_current_bag_count": _reservation_current_bag_count,
-    "reservation_num_passengers": _reservation_num_passengers,
-    "update_payment_in_profile": _update_payment_in_profile,
-    "new_total_baggages": _new_total_baggages,
-    "update_num_passengers": _update_num_passengers,
-    "user_compensation_eligible": _user_compensation_eligible,
-    "certificate_amount_valid": _certificate_amount_valid,
-}
-
-
-def resolve(event_id: str, event: Any, graph: Any) -> Any:
-    """Resolve a dcr2.yaml input event's value from the pending tool call's
-    own arguments plus a FlightDB lookup. Returns
-    :data:`thesis_dpm_secure_langgraph.UNRESOLVED` for anything not
-    (yet) determinable, which leaves the corresponding DCR gate blocked."""
-    handler = _HANDLERS.get(event_id)
-    if handler is None:
-        return UNRESOLVED
-    try:
-        return handler(event)
-    except Exception:
-        return UNRESOLVED
+resolve = registry.resolve
