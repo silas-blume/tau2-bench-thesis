@@ -12,10 +12,11 @@ clean:
 	rm -rf dist
 	rm -rf build
 
-## Install tau2 and local dependencies as editable; ensures pm4py fork is editable last
-## so pip cannot overwrite it with a non-editable copy that lacks predicate_loader
+## Install tau2 and local research dependencies as editable. The DCR fork is
+## installed after the Declare monitor so its pm4py namespace remains active.
 .PHONY: install
 install:
+	pip install -e /home/silas/projects/Declare4PyRM
 	pip install -e /home/silas/projects/thesis-dpm-secure-langgraph
 	pip install -e /home/silas/projects/pm4py-dcr
 	rm -rf .venv/lib/python*/site-packages/pm4py/
