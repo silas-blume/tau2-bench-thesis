@@ -8,7 +8,8 @@ dumps/
 dump.rdb
 *.rdg
 logs/
-data/simulations/
+data/simulations/*
+!data/simulations/README.md
 data/exp/
 data/datasets/
 data/models/
