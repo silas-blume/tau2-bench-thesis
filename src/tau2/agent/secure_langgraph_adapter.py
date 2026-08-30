@@ -61,6 +61,10 @@ _VALIDATED_MARKER = "[VALIDATED: delegated to tau2]"
 # Prefix used by SecureToolNode when declining a tool call.
 _DECLINE_PREFIX = "Tool call declined."
 
+# Azure OpenAI rejects messages with more than 128 tool_calls. Cap well below
+# that; the agent enforces single-call-per-turn anyway.
+_MAX_TOOL_CALLS_PER_MSG = 8
+
 
 def _create_stub_tools(tau2_tools: list[Tool]) -> list[StructuredTool]:
     """Create LangChain StructuredTools that match real tool schemas but only
@@ -130,6 +134,7 @@ class SecureLangGraphAdapter(LocalAgent[list]):
             validator=self.validator,
             secure_node_verbose=secure_node_verbose,
             logger=secure_graph_logger,
+            max_tool_calls_per_message=_MAX_TOOL_CALLS_PER_MSG,
         )
         graph.add_node("agent", self._call_model_node, secure=False)
         # ToolNode is auto-upgraded to SecureToolNode by SecureStateGraph
@@ -158,6 +163,16 @@ class SecureLangGraphAdapter(LocalAgent[list]):
         if isinstance(last, AIMessage) and last.tool_calls:
             return "tools"
         return END
+
+    def _reset_stub_state(self) -> None:
+        """Hook called before each internal graph invocation.
+
+        Override in subclasses that use stateful stub tools (e.g. a stub
+        AirlineTools whose DB gets mutated during security checking) so the stub
+        state is restored to its initial snapshot before each retry, preventing
+        stub mutations from leaking across retries and diverging from the real
+        tau2 environment state.
+        """
 
     @staticmethod
     def _pending_tool_call_ids(messages: list[Any]) -> set[str]:
@@ -197,6 +212,18 @@ class SecureLangGraphAdapter(LocalAgent[list]):
 
         for msg in state:
             if isinstance(msg, AIMessage) and msg.tool_calls:
+                # Cap tool_calls to avoid API limits (e.g. Azure max 128).
+                if len(msg.tool_calls) > _MAX_TOOL_CALLS_PER_MSG:
+                    self._logger.warning(
+                        "Capping AIMessage tool_calls from %d to %d to stay within API limits",
+                        len(msg.tool_calls),
+                        _MAX_TOOL_CALLS_PER_MSG,
+                    )
+                    msg = AIMessage(
+                        content=msg.content,
+                        tool_calls=list(msg.tool_calls[:_MAX_TOOL_CALLS_PER_MSG]),
+                        id=msg.id,
+                    )
                 sanitized.append(msg)
                 for tc in msg.tool_calls:
                     tc_id = tc.get("id")
@@ -303,6 +330,10 @@ class SecureLangGraphAdapter(LocalAgent[list]):
         retries = 0
         while True:
             state = self._sanitize_tool_messages(list(state))
+            # Reset any stub state that may have been mutated by previous invocations
+            # (e.g. stub DB reservations created during security checking). Subclasses
+            # that use stateful stub tools should override this method.
+            self._reset_stub_state()
             # Invoke the graph (agent node -> SecureToolNode -> END)
             result = self._graph.invoke({"messages": state})
             updated_messages: list = list(result.get("messages", state))
@@ -423,7 +454,7 @@ class SecureLangGraphAdapter(LocalAgent[list]):
                     "args": tc.get("args", {}),
                 }
                 # Return state up to the AIMessage -- drop stub ToolMessages
-                state = updated_messages[: last_ai_idx + 1]
+                state = self._sanitize_tool_messages(updated_messages[: last_ai_idx + 1])
                 out = AssistantMessage(
                     role="assistant",
                     tool_calls=[
@@ -503,6 +534,13 @@ class SecureLangGraphAdapter(LocalAgent[list]):
             for key, value in args.items():
                 event[key] = _coerce_numeric(value) if _coerce_numeric else value
         self.trace_collector.get_trace().append(event)
+        # Notify subscribers (e.g. DCRStateTracker) so the committed DCR graph
+        # is updated. Direct .append() bypasses _publish_trace_event, which
+        # means the state tracker never sees the completion event and keeps
+        # declining calls that depend on this tool having executed.
+        _publish = getattr(self.trace_collector, "_publish_trace_event", None)
+        if callable(_publish):
+            _publish(event)
 
         # Truncate output for readability in logs
         output = tool_msg.content or ""

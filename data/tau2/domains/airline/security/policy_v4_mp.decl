@@ -1,0 +1,97 @@
+activity get_user_details
+activity get_reservation_details
+activity search_direct_flight
+activity search_onestop_flight
+activity get_flight_status
+activity book_reservation
+activity update_reservation_flights
+activity update_reservation_baggages
+activity update_reservation_passengers
+activity cancel_reservation
+activity send_certificate
+activity transfer_to_human_agents
+activity calculate
+activity list_all_airports
+activity termination
+activity message
+activity cognition
+bind get_user_details: id, parent_id, user_id, status
+bind get_reservation_details: id, parent_id, reservation_id, status
+bind search_direct_flight: id, parent_id, origin, destination, date, status
+bind search_onestop_flight: id, parent_id, origin, destination, date, status
+bind get_flight_status: id, parent_id, flight_number, date, status
+bind book_reservation: id, parent_id, user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance, status
+bind update_reservation_flights: id, parent_id, reservation_id, cabin, flights, payment_id, status
+bind update_reservation_baggages: id, parent_id, reservation_id, total_baggages, nonfree_baggages, payment_id, status
+bind update_reservation_passengers: id, parent_id, reservation_id, passengers, status
+bind cancel_reservation: id, parent_id, reservation_id, reason, status
+bind send_certificate: id, parent_id, user_id, amount, status
+bind transfer_to_human_agents: id, parent_id, summary, status
+bind calculate: id, parent_id, expression, status
+bind list_all_airports: id, parent_id, status
+bind termination: id, parent_id, termination_reason, termination_initiator
+bind message: id, parent_id, sender, receiver, content
+bind cognition: id, parent_id, content, cognition_type
+termination_reason: task_complete, error, user_request, max_iterations
+termination_initiator: AGENT, USER, SYSTEM
+sender: USER, AGENT, SYSTEM
+receiver: USER, AGENT, SYSTEM
+cognition_type: PLANNING, REASONING, REFLECTION
+Precedence[get_user_details, book_reservation] |  | A.user_id == T.user_id | 
+Absence[book_reservation] | count_items(A.passengers) > 5 | 
+Absence[book_reservation] | not pass_info_complete(A.passengers) | 
+Absence[book_reservation] | count_credit_cards(A.payment_methods) > 1 | 
+Absence[book_reservation] | count_gift_cards(A.payment_methods) > 3 | 
+Absence[book_reservation] | count_certificates(A.payment_methods) > 1 | 
+Absence[book_reservation] | has_unknown_payment(A.payment_methods, A.user_id) | 
+Absence[book_reservation] | A.cabin == 'basic_economy' and user_membership_level(A.user_id) == 'regular' and A.total_baggages - A.nonfree_baggages > 0 | 
+Absence[book_reservation] | A.cabin == 'economy' and user_membership_level(A.user_id) == 'regular' and A.total_baggages - A.nonfree_baggages > 1 | 
+Absence[book_reservation] | A.cabin == 'business' and user_membership_level(A.user_id) == 'regular' and A.total_baggages - A.nonfree_baggages > 2 | 
+Absence[book_reservation] | A.cabin == 'basic_economy' and user_membership_level(A.user_id) == 'silver' and A.total_baggages - A.nonfree_baggages > 1 | 
+Absence[book_reservation] | A.cabin == 'economy' and user_membership_level(A.user_id) == 'silver' and A.total_baggages - A.nonfree_baggages > 2 | 
+Absence[book_reservation] | A.cabin == 'business' and user_membership_level(A.user_id) == 'silver' and A.total_baggages - A.nonfree_baggages > 3 | 
+Absence[book_reservation] | A.cabin == 'basic_economy' and user_membership_level(A.user_id) == 'gold' and A.total_baggages - A.nonfree_baggages > 2 | 
+Absence[book_reservation] | A.cabin == 'economy' and user_membership_level(A.user_id) == 'gold' and A.total_baggages - A.nonfree_baggages > 3 | 
+Absence[book_reservation] | A.cabin == 'business' and user_membership_level(A.user_id) == 'gold' and A.total_baggages - A.nonfree_baggages > 4 | 
+Precedence[search_direct_flight, search_onestop_flight] |  |  | 
+Absence[search_direct_flight] | A.origin == A.destination | 
+Absence[search_onestop_flight] | A.origin == A.destination | 
+Absence[book_reservation] | A.origin == A.destination | 
+Absence[book_reservation] | A.nonfree_baggages > A.total_baggages | 
+Absence[book_reservation] | A.total_baggages < 0 | 
+Absence[book_reservation] | A.nonfree_baggages < 0 | 
+Absence[book_reservation] | not all_flights_available(A.flights) | 
+Precedence[get_user_details, update_reservation_flights] |  | T.user_id == reservation_user_id(A.reservation_id) | 
+Precedence[get_user_details, update_reservation_baggages] |  | T.user_id == reservation_user_id(A.reservation_id) | 
+Precedence[get_user_details, update_reservation_passengers] |  | T.user_id == reservation_user_id(A.reservation_id) | 
+Precedence[get_reservation_details, update_reservation_flights] |  | T.reservation_id == A.reservation_id | 
+Precedence[get_reservation_details, update_reservation_baggages] |  | T.reservation_id == A.reservation_id | 
+Precedence[get_reservation_details, update_reservation_passengers] |  | T.reservation_id == A.reservation_id | 
+Absence[update_reservation_flights] | reservation_cabin(A.reservation_id) == 'basic_economy' | 
+Absence[update_reservation_flights] | reservation_origin(A.reservation_id) != flight_update_origin(A.flights) | 
+Absence[update_reservation_flights] | reservation_destination(A.reservation_id) != flight_update_destination(A.flights) | 
+Absence[update_reservation_flights] | reservation_trip_type(A.reservation_id) != flight_update_trip_type(A.flights) | 
+Absence[update_reservation_flights] | has_flown_flights(A.reservation_id) | 
+Absence[update_reservation_flights] | route_changed(A.reservation_id, A.flights) | 
+Absence[update_reservation_flights] | not all_flights_same_cabin_class(A.flights) | 
+Absence[update_reservation_baggages] | A.total_baggages < reservation_baggage_count(A.reservation_id) | 
+Absence[update_reservation_passengers] | count_items(A.passengers) != reservation_passenger_count(A.reservation_id) | 
+Precedence[get_user_details, get_reservation_details] |  | T.user_id == reservation_user_id(A.reservation_id) | 
+Absence[update_reservation_baggages] | A.total_baggages < 0 | 
+Absence[update_reservation_baggages] | A.nonfree_baggages < 0 | 
+Absence[update_reservation_baggages] | A.nonfree_baggages > A.total_baggages | 
+Precedence[get_user_details, cancel_reservation] |  | T.user_id == reservation_user_id(A.reservation_id) | 
+Absence[cancel_reservation] | has_flown_flights(A.reservation_id) | 
+Absence[cancel_reservation] | not cancellation_eligible(A.reservation_id) | 
+Precedence[get_user_details, send_certificate] |  | A.user_id == T.user_id | 
+Absence[send_certificate] | not compensation_eligible(A.user_id) | 
+Absence[send_certificate] | not valid_certificate_amount(A.user_id, A.amount) | 
+Precedence[get_flight_status, send_certificate] |  |  | 
+Absence[send_certificate] | A.amount <= 0 | 
+Absence[send_certificate] | A.amount > 500 | 
+Not Response[transfer_to_human_agents, book_reservation] |  |  | 
+Not Response[transfer_to_human_agents, update_reservation_flights] |  |  | 
+Not Response[transfer_to_human_agents, update_reservation_baggages] |  |  | 
+Not Response[transfer_to_human_agents, update_reservation_passengers] |  |  | 
+Not Response[transfer_to_human_agents, cancel_reservation] |  |  | 
+Not Response[transfer_to_human_agents, send_certificate] |  |  | 

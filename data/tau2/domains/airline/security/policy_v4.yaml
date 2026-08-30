@@ -1,0 +1,559 @@
+
+name: airline-policy-v4
+version: "4.0"
+info: >
+  YAML-heavy variant.  Inline where clauses handle all comparisons;
+  predicates_v4.py provides only trivial single-purpose DB lookups
+  that return scalars consumed by the YAML conditions.
+authors:
+  - Silas
+
+activities:
+  - get_user_details(user_id:str)
+  - get_reservation_details(reservation_id:str)
+  - search_direct_flight(origin:str, destination:str, date:str)
+  - search_onestop_flight(origin:str, destination:str, date:str)
+  - get_flight_status(flight_number:str, date:str)
+  - book_reservation(user_id:str, origin:str, destination:str, flight_type:str, cabin:str, flights:str, passengers:str, payment_methods:str, total_baggages:int, nonfree_baggages:int, insurance:str)
+  - update_reservation_flights(reservation_id:str, cabin:str, flights:str, payment_id:str)
+  - update_reservation_baggages(reservation_id:str, total_baggages:int, nonfree_baggages:int, payment_id:str)
+  - update_reservation_passengers(reservation_id:str, passengers:str)
+  - cancel_reservation(reservation_id:str, reason:str)
+  - send_certificate(user_id:str, amount:int)
+  - transfer_to_human_agents(summary:str)
+  - calculate(expression:str)
+  - list_all_airports()
+
+constraints:
+
+## Book flight
+
+### Preconditions
+
+  - name: user-before-booking
+    template: Precedence
+    first:
+      event: get_user_details(uid)
+      where:
+        - s.user_id == uid
+    second: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+    description: "Before booking, retrieve user details first."
+
+### Passenger
+
+  - name: book-max-five-passengers
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - count_items(passengers) > 5
+    description: "Each reservation can have at most five passengers."
+
+  - name: all-passengers-data
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - not pass_info_complete(passengers)
+    description: "For each passenger first name, second name and date of birth must be provided."
+
+### Payment
+
+  - name: book-too-many-credit-cards
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - count_credit_cards(payment_methods) > 1
+    description: "Booking can use at most 1 credit card."
+
+  - name: book-too-many-gift-cards
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - count_gift_cards(payment_methods) > 3
+    description: "Booking can use at most 3 gift cards."
+
+  - name: book-too-many-certificates
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - count_certificates(payment_methods) > 1
+    description: "Booking can use at most 1 travel certificate."
+
+  - name: book-payment-in-profile
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - has_unknown_payment(payment_methods, user_id)
+    description: "All payment methods must be in the user profile beforehand."
+
+### Baggage
+
+  - name: baggage-regular-basic-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "basic_economy"
+        - user_membership_level(user_id) == "regular"
+        - total_baggages - nonfree_baggages > 0
+    description: "Regular basic economy flights allow no free baggage."
+
+  - name: baggage-regular-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "economy"
+        - user_membership_level(user_id) == "regular"
+        - total_baggages - nonfree_baggages > 1
+    description: "Regular economy flights allow 1 free checked baggage."
+
+  - name: baggage-regular-business
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "business"
+        - user_membership_level(user_id) == "regular"
+        - total_baggages - nonfree_baggages > 2
+    description: "Regular business flights allow 2 free checked baggages."
+
+  - name: baggage-silver-basic-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "basic_economy"
+        - user_membership_level(user_id) == "silver"
+        - total_baggages - nonfree_baggages > 1
+    description: "Silver basic economy flights allow 1 free checked baggage."
+
+  - name: baggage-silver-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "economy"
+        - user_membership_level(user_id) == "silver"
+        - total_baggages - nonfree_baggages > 2
+    description: "Silver economy flights allow 2 free checked baggages."
+
+  - name: baggage-silver-business
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "business"
+        - user_membership_level(user_id) == "silver"
+        - total_baggages - nonfree_baggages > 3
+    description: "Silver business flights allow 3 free checked baggages."
+
+  - name: baggage-gold-basic-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "basic_economy"
+        - user_membership_level(user_id) == "gold"
+        - total_baggages - nonfree_baggages > 2
+    description: "Gold basic economy flights allow 2 free checked baggages."
+
+  - name: baggage-gold-economy
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "economy"
+        - user_membership_level(user_id) == "gold"
+        - total_baggages - nonfree_baggages > 3
+    description: "Gold economy flights allow 3 free checked baggages."
+
+  - name: baggage-gold-business
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods,   total_baggages, nonfree_baggages, insurance)
+      where:
+        - cabin == "business"
+        - user_membership_level(user_id) == "gold"
+        - total_baggages - nonfree_baggages > 4
+    description: "Gold business flights allow 4 free checked baggages."
+
+### Implicit
+
+#### Search & route
+
+  - name: search-direct-before-onestop
+    template: Precedence
+    first: search_direct_flight(orig, dest, date)
+    second: search_onestop_flight(orig, dest, date)
+    description: "Search for direct flights before one-stop options."
+
+  - name: search-direct-origin-ne-dest
+    template: Absence
+    first:
+      event: search_direct_flight(origin, destination, date)
+      where:
+        - origin == destination
+    description: "Origin and destination must differ when searching direct flights."
+
+  - name: search-onestop-origin-ne-dest
+    template: Absence
+    first:
+      event: search_onestop_flight(origin, destination, date)
+      where:
+        - origin == destination
+    description: "Origin and destination must differ when searching one-stop flights."
+
+  - name: book-origin-ne-dest
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - origin == destination
+    description: "Origin and destination must differ when booking."
+
+#### Booking integrity
+
+  - name: book-nonfree-le-total
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - nonfree_baggages > total_baggages
+    description: "Non-free bag count cannot exceed total bag count for booking."
+
+  - name: book-total-bags-non-negative
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - total_baggages < 0
+    description: "Total bag count cannot be negative for booking."
+
+  - name: book-nonfree-bags-non-negative
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - nonfree_baggages < 0
+    description: "Non-free bag count cannot be negative for booking."
+
+  - name: book-flights-available
+    template: Absence
+    first:
+      event: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+      where:
+        - not all_flights_available(flights)
+    description: "All flights in the reservation must be available at booking time."
+
+
+## Modify flight
+
+### Preconditions
+
+  - name: user-before-flight-update
+    template: Precedence
+    first:
+      event: get_user_details(user_id)
+      where:
+        - user_id == reservation_user_id(s.reservation_id)
+    second: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+    description: "Before changing flights, verify user identity first."
+
+  - name: user-before-baggage-update
+    template: Precedence
+    first:
+      event: get_user_details(user_id)
+      where:
+        - user_id == reservation_user_id(s.reservation_id)
+    second: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+    description: "Before changing baggage, verify user identity first."
+
+  - name: user-before-passenger-update
+    template: Precedence
+    first:
+      event: get_user_details(user_id)
+      where:
+        - user_id == reservation_user_id(s.reservation_id)
+    second: update_reservation_passengers(reservation_id, passengers)
+    description: "Before changing passengers, verify user identity first."
+
+  - name: reservation-before-flight-update
+    template: Precedence
+    first:
+      event: get_reservation_details(rid)
+      where:
+        - rid == s.reservation_id
+    second: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+    description: "Before changing flights, inspect reservation details first."
+
+  - name: reservation-before-baggage-update
+    template: Precedence
+    first:
+      event: get_reservation_details(rid)
+      where:
+        - rid == s.reservation_id
+    second: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+    description: "Before changing baggage, inspect reservation details first."
+
+  - name: reservation-before-passenger-update
+    template: Precedence
+    first:
+      event: get_reservation_details(rid)
+      where:
+        - rid == s.reservation_id
+    second: update_reservation_passengers(reservation_id, passengers)
+    description: "Before changing passengers, inspect reservation details first."
+
+### Flight modification
+
+  - name: no-basic-economy-flight-modification
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - reservation_cabin(reservation_id) == "basic_economy"
+    description: "Cannot modify flights on a reservation that is currently in basic economy cabin."
+
+  - name: no-change-origin
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - reservation_origin(reservation_id) != flight_update_origin(flights)
+    description: "Flight modifications cannot change the origin airport."
+
+  - name: no-change-destination
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - reservation_destination(reservation_id) != flight_update_destination(flights)
+    description: "Flight modifications cannot change the destination airport."
+
+  - name: no-change-type
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - reservation_trip_type(reservation_id) != flight_update_trip_type(flights)
+    description: "Flight modifications cannot change the trip type (one-way vs round-trip)."
+
+  - name: cabin-change-no-flown-flights
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - has_flown_flights(reservation_id)
+    description: "Cannot change cabin if any flight has already been flown."
+
+  - name: flight-update-preserves-route
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - route_changed(reservation_id, flights)
+    description: "Flight modification must not change origin, destination, or trip type."
+
+  - name: all-flights-same-cabin-class
+    template: Absence
+    first:
+      event: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+      where:
+        - not all_flights_same_cabin_class(flights)
+    description: "All flights in a reservation must have the same cabin class."
+
+### Baggage modification
+
+  - name: baggage-only-add
+    template: Absence
+    first:
+      event: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+      where:
+        - total_baggages < reservation_baggage_count(reservation_id)
+    description: "Baggage can only be added, not removed."
+
+### Passenger modification
+
+  - name: passenger-count-unchanged
+    template: Absence
+    first:
+      event: update_reservation_passengers(reservation_id, passengers)
+      where:
+        - count_items(passengers) != reservation_passenger_count(reservation_id)
+    description: "Cannot modify the number of passengers in a reservation."
+
+### Implicit
+
+  - name: user-before-reservation-lookup
+    template: Precedence
+    first:
+      event: get_user_details(user_id)
+      where:
+        - user_id == reservation_user_id(s.reservation_id)
+    second: get_reservation_details(reservation_id)
+    description: "Obtain user context before reservation lookup."
+
+#### Baggage integrity
+
+  - name: baggage-update-total-non-negative
+    template: Absence
+    first:
+      event: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+      where:
+        - total_baggages < 0
+    description: "Total bag count cannot be negative for baggage update."
+
+  - name: baggage-update-nonfree-non-negative
+    template: Absence
+    first:
+      event: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+      where:
+        - nonfree_baggages < 0
+    description: "Non-free bag count cannot be negative for baggage update."
+
+  - name: baggage-update-nonfree-le-total
+    template: Absence
+    first:
+      event: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+      where:
+        - nonfree_baggages > total_baggages
+    description: "Non-free bag count cannot exceed total bag count for baggage update."
+
+## Cancel flight
+
+### Preconditions
+
+  - name: user-before-cancellation
+    template: Precedence
+    first:
+      event: get_user_details(user_id)
+      where:
+        - user_id == reservation_user_id(s.reservation_id)
+    second: cancel_reservation(reservation_id)
+    description: "Before cancellation, verify user identity first."
+
+### Eligibility
+
+  - name: cancel-no-flown-flights
+    template: Absence
+    first:
+      event: cancel_reservation(reservation_id, reason)
+      where:
+        - has_flown_flights(reservation_id)
+    description: "Cannot cancel a reservation if any flight has already been flown. Transfer to human agent for special handling."
+
+  - name: cancel-not-eligible
+    template: Absence
+    first:
+      event: cancel_reservation(reservation_id, reason)
+      where:
+        - not cancellation_eligible(reservation_id) # TODO check predicate
+    description: "Cannot cancel unless business class, airline-cancelled flight, or insured. NOTE: the 24h booking window must be verified by the agent."
+
+
+## Refunds and Compensation
+
+### Preconditions
+
+  - name: user-before-compensation
+    template: Precedence
+    first:
+      event: get_user_details(uid)
+      where:
+        - s.user_id == uid
+    second: send_certificate(user_id, amount)
+    description: "Before compensation, verify user identity first."
+
+### Eligibility
+
+  - name: compensation-eligibility
+    template: Absence
+    first:
+      event: send_certificate(user_id, amount)
+      where:
+        - not compensation_eligible(user_id)
+    description: "Compensation only for silver/gold members, insured passengers, or business class. Do not compensate if the user is regular member and has no travel insurance and flies (basic) economy."
+
+### Certificate amount
+
+  - name: certificate-amount-valid
+    template: Absence
+    first:
+      event: send_certificate(user_id, amount)
+      where:
+        - not valid_certificate_amount(user_id, amount) # TODO check predicate
+    description: "Certificate amount must match policy ($100/pax cancelled, $50/pax delayed)."
+
+### Implicit
+
+#### Preconditions
+
+  - name: flight-status-before-certificate
+    template: Precedence
+    first: get_flight_status(flight_number, date)
+    second: send_certificate(user_id, amount)
+    description: "Confirm flight status facts before issuing compensation."
+
+#### Certificate amount
+
+  - name: certificate-amount-positive
+    template: Absence
+    first:
+      event: send_certificate(user_id, amount)
+      where:
+        - amount <= 0
+    description: "Certificate amount must be positive."
+
+  - name: certificate-amount-max
+    template: Absence
+    first:
+      event: send_certificate(user_id, amount)
+      where:
+        - amount > 500
+    description: "Certificate amount cannot exceed $500 (max 5 passengers x $100)."
+
+
+## Transfer (implicit)
+
+
+  - name: no-booking-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: book_reservation(user_id, origin, destination, flight_type, cabin, flights, passengers, payment_methods, total_baggages, nonfree_baggages, insurance)
+    description: "Do not continue with booking after transfer to human agent."
+
+  - name: no-flight-update-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: update_reservation_flights(reservation_id, cabin, flights, payment_id)
+    description: "Do not continue with flight updates after transfer to human agent."
+
+  - name: no-baggage-update-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: update_reservation_baggages(reservation_id, total_baggages, nonfree_baggages, payment_id)
+    description: "Do not continue with baggage updates after transfer to human agent."
+
+  - name: no-passenger-update-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: update_reservation_passengers(reservation_id, passengers)
+    description: "Do not continue with passenger updates after transfer to human agent."
+
+  - name: no-cancellation-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: cancel_reservation(reservation_id)
+    description: "Do not continue with cancellation after transfer to human agent."
+
+  - name: no-compensation-after-transfer
+    template: Not Response
+    first: transfer_to_human_agents(summary)
+    second: send_certificate(user_id, amount)
+    description: "Do not continue with compensation after transfer to human agent."
